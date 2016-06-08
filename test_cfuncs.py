@@ -27,7 +27,7 @@ def outline(imgptr, width, height):
 from PyQt4.QtGui import QApplication, QImage, QPixmap, QLabel
 a = QApplication(sys.argv)
 myImage = QImage()
-myImage.load("outtest/pieces/piece15.png")
+myImage.load("puzzles/outtest/pieces/piece15.png")
 
 outline(myImage.bits(), myImage.width(), myImage.height())
 
