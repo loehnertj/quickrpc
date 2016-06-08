@@ -60,14 +60,15 @@ inline int getdy(int dir) {
     return (dir%2) ? (2-dir) : 0;
 }
 
-int out_of_bounds(XYData xydata, int idx) {
-    if (idx<0 || idx>=xydata.width*xydata.height) return TRUE;
-    return FALSE;
+int get_idx(XYData xydata, int x, int y) {
+    if (x<0 || x>=xydata.width) return -1;
+    if (y<0 || y>=xydata.width) return -1;
+    return y*xydata.width + x;
 }
 
 LONG img_safe(XYData xydata, int x, int y) {
-    int idx = y*xydata.width + x;
-    if (out_of_bounds(xydata, idx)) return 0;
+    int idx = get_idx(xydata, x, y);
+    if (idx<0) return 0;
     return xydata.img[idx];
 }
 
@@ -98,8 +99,8 @@ BorderPoint move_to_next(XYData xydata, BorderPoint cursor) {
     int p1y = cursor.y + getdy(cursor.dir)+getdy(cursor.dir+LEFT);
     
     
-    int idx = p1y*xydata.width + p1x;
-    if (!out_of_bounds(xydata, idx)) {
+    int idx = get_idx(xydata, p1x, p1y);
+    if (idx>=0) {
         if ((img_safe(xydata, p1x, p1y) & 0xff000000) != 0) {
             // p1 is the next point
             cursor.x = p1x;
@@ -113,23 +114,23 @@ BorderPoint move_to_next(XYData xydata, BorderPoint cursor) {
         // p1 was transparent, check p2
         int p2x = cursor.x + getdx(cursor.dir);
         int p2y = cursor.y + getdy(cursor.dir);
-        idx = p2y*xydata.width + p2x;
+        idx = get_idx(xydata, p2x, p2y);
         //printf("-> p2=%i %i ", p2x, p2y);
-        if (!out_of_bounds(xydata, idx)) {
+        if (idx>=0) {
             if ((img_safe(xydata, p2x, p2y) & 0xff000000) != 0) {
                 // p2 is the next point
                 cursor.x = p2x;
                 cursor.y = p2y;
                 // do not turn
                 found_next = TRUE;
-                // printf("->go\n");
+                //printf("->go\n");
             }
         }
     }
     if (!found_next) {
         // p1 and p2 transparent => turn RIGHT and try again
         cursor.dir = (cursor.dir + RIGHT) % 4;
-        // printf("-> RIGHT\n");
+        //printf("-> RIGHT\n");
         // Note that there is no check for >n consecutive right turns. That is because after 4 right turns
         // cursor will be back in the initial state, and thus the main proc will enter next stage or exit.
         // Also the single pixel case is not really likely.
@@ -147,8 +148,8 @@ void init_dist_and_origimg(XYData xydata, BorderPoint cursor, int border_width, 
         for (int j=0; j<jmax; j++) {
             int px = cursor.x + i*dxi + j*dxj;
             int py = cursor.y + i*dyi + j*dyj;
-            int idx = py*xydata.width + px;
-            if (out_of_bounds(xydata, idx)) continue;
+            int idx = get_idx(xydata, px, py);
+            if (idx<0) continue;
             
             // payload
             xydata.dist[idx] = border_width+1;
@@ -157,8 +158,15 @@ void init_dist_and_origimg(XYData xydata, BorderPoint cursor, int border_width, 
     }
 }
 
-void render_border(XYData xydata, BorderPoint cursor, BorderPoint bp_A, BorderPoint bp_B, int border_width, int did_leftturn) {
+void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int backlog_size, int border_width, int did_leftturn) {
     const float rel_strength = 0.05;
+    
+    // point A: backlog_size/2 steps before bp_Center
+    // point Center: the point to render
+    // point B: backlog_size/2 steps after bp_Center
+    BorderPoint bp_A = backlog[(backlog_pos+1) % backlog_size];
+    BorderPoint cursor = backlog[(backlog_pos+backlog_size/2) % backlog_size];
+    BorderPoint bp_B = backlog[backlog_pos];
     
     int dxi = getdx(cursor.dir+RIGHT);
     int dyi = getdy(cursor.dir+RIGHT);
@@ -169,8 +177,8 @@ void render_border(XYData xydata, BorderPoint cursor, BorderPoint bp_A, BorderPo
         for (int j=0; j<jmax; j++) {
             int px = cursor.x + i*dxi + j*dxj;
             int py = cursor.y + i*dyi + j*dyj;
-            int idx = py*xydata.width + px;
-            if (out_of_bounds(xydata, idx)) continue;
+            int idx = get_idx(xydata, px, py);
+            if (idx<0) continue;
             
             // payload
             float alpha = 1.0; //FIXME
@@ -211,7 +219,7 @@ EXPORT void outline(LONG img[], int width, int height) {
     int did_leftturn;
     
     XYData xydata;
-    BorderPoint backlog[SMOOTH_SIZE];
+    BorderPoint *backlog;
     BYTE backlog_pos;
     // tracks if the backlog was fully filled when entering stage 2.
     int backlog_full = FALSE;
@@ -233,6 +241,7 @@ EXPORT void outline(LONG img[], int width, int height) {
         return;
     }
     
+    backlog = (BorderPoint*) malloc(SMOOTH_SIZE*sizeof(BorderPoint));
     xydata.dist = (float*) malloc(width*height*sizeof(float));
     xydata.orig_img = (LONG*) malloc(width*height*sizeof(LONG));
     
@@ -248,6 +257,7 @@ EXPORT void outline(LONG img[], int width, int height) {
         backlog_pos = (backlog_pos+1) % SMOOTH_SIZE;
         if (backlog_pos==0) backlog_full = TRUE;
         cursor = move_to_next(xydata, cursor);
+        //printf("%d %d %d\n", cursor.x, cursor.y, cursor.dir);
         backlog[backlog_pos] = cursor;
         if (cursor.x < 0) break;
         
@@ -256,7 +266,7 @@ EXPORT void outline(LONG img[], int width, int height) {
         if (stage==1) {
             // stage 1: init arrays where necessary
             init_dist_and_origimg(xydata, cursor, border_width, did_leftturn);
-            if (cursor.x == startpoint.x && cursor.y == startpoint.y) {
+            if (cursor.x == startpoint.x && cursor.y == startpoint.y && cursor.dir == startpoint.dir) {
                 stage=2;
                 printf("enter stage 2 at cnt=%d", cnt);
             }
@@ -266,13 +276,7 @@ EXPORT void outline(LONG img[], int width, int height) {
             if (!backlog_full) break;
             
             // stage 2: render border
-            // point A: SMOOTH_SIZE/2 steps before bp_Center
-            // point Center: the point to render
-            // point B: SMOOTH_SIZE/2 steps after bp_Center
-            BorderPoint bp_A = backlog[(backlog_pos+1) % SMOOTH_SIZE];
-            BorderPoint bp_Center = backlog[(backlog_pos+SMOOTH_SIZE/2) % SMOOTH_SIZE];
-            BorderPoint bp_B = backlog[backlog_pos];
-            render_border(xydata, bp_Center, bp_A, bp_B, border_width, did_leftturn);
+            render_border(xydata, backlog, backlog_pos, SMOOTH_SIZE, border_width, did_leftturn);
             
             if (cursor.x == startpoint.x && cursor.y == startpoint.y) break;
         }
@@ -281,4 +285,5 @@ EXPORT void outline(LONG img[], int width, int height) {
     
     free(xydata.dist);
     free(xydata.orig_img);
+    free(backlog);
 }
