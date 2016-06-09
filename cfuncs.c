@@ -60,9 +60,25 @@ inline int getdy(int dir) {
     return (dir%2) ? (2-dir) : 0;
 }
 
+// rotates the given number of 90deg-steps CW.
+void rotate(int* x, int*y, int steps) {
+    int x2 = (*x)*getdx(steps) + (*y)*getdx(steps+1);
+    int y2 = (*x)*getdy(steps) + (*y)*getdy(steps+1);
+    *x = x2;
+    *y = y2;
+}
+
+// rotates the given number of 90deg-steps CW.
+void rotatef(float* x, float*y, int steps) {
+    float x2 = (*x)*getdx(steps) + (*y)*getdx(steps+1);
+    float y2 = (*x)*getdy(steps) + (*y)*getdy(steps+1);
+    *x = x2;
+    *y = y2;
+}
+
 int get_idx(XYData xydata, int x, int y) {
     if (x<0 || x>=xydata.width) return -1;
-    if (y<0 || y>=xydata.width) return -1;
+    if (y<0 || y>=xydata.height) return -1;
     return y*xydata.width + x;
 }
 
@@ -159,52 +175,78 @@ void init_dist_and_origimg(XYData xydata, BorderPoint cursor, int border_width, 
 }
 
 void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int backlog_size, int border_width, int did_leftturn) {
-    const float rel_strength = 0.05;
+    const float rel_strength = 0.1;
+    const float max_strength = 255;
     
-    // point A: backlog_size/2 steps before bp_Center
-    // point Center: the point to render
-    // point B: backlog_size/2 steps after bp_Center
-    BorderPoint bp_A = backlog[(backlog_pos+1) % backlog_size];
-    BorderPoint cursor = backlog[(backlog_pos+backlog_size/2) % backlog_size];
-    BorderPoint bp_B = backlog[backlog_pos];
+    // calculate backlog indices.
+    // point A: oldest backlog point
+    // point B: 2nd-oldest backlog point
+    // point cursor: the point to render
+    // point Y: second-newest backlog point
+    // point Z: newest backlog point
+    int bp_A = (backlog_pos+1) % backlog_size;
+    int bp_B = (backlog_pos+2) % backlog_size;
+    int bp_Cursor = (backlog_pos + backlog_size/2) % backlog_size;
+    int bp_Y = (backlog_pos + backlog_size-1) % backlog_size;
+    int bp_Z = backlog_pos;
     
+    BorderPoint cursor = backlog[bp_Cursor];
+    // Find directions of outline normal on begin and end of cursor segment.
+    // outline normal is the smoothed direction vector rotated clockwise 90deg.
+    float nx_b = -(backlog[bp_Y].y - backlog[bp_A].y);
+    float ny_b = +(backlog[bp_Y].x - backlog[bp_A].x);
+    float nx_e = -(backlog[bp_Z].y - backlog[bp_B].y);
+    float ny_e = +(backlog[bp_Z].x - backlog[bp_B].x);
+    
+    // illumination vector -30deg
+    float cosphi = (nx_b+nx_e)*-0.5 + (ny_b+ny_e)*-0.866;
+    cosphi /= sqrt((nx_b+nx_e)*(nx_b+nx_e) + (ny_b+ny_e)*(ny_b+ny_e));
+    
+    // rotate directions as if cursor segment would point right (direction 0).
+    rotatef(&nx_b, &ny_b, -cursor.dir);
+    rotatef(&nx_e, &ny_e, -cursor.dir);
+    
+    // normal points in "outside" direction? Flee in terror.
+    if (ny_b<=0 || ny_e<=0) return;
+    
+    float slope_b = nx_b / ny_b;
+    float slope_e = nx_e / ny_e;
+    
+    // i will count in "inside" direction, j in cursor direction.
     int dxi = getdx(cursor.dir+RIGHT);
     int dyi = getdy(cursor.dir+RIGHT);
-    int dxj = getdx(cursor.dir+RIGHT+RIGHT);
-    int dyj = getdy(cursor.dir+RIGHT+RIGHT);
+    int dxj = getdx(cursor.dir);
+    int dyj = getdy(cursor.dir);
     for (int i=0; i<border_width; i++) {
-        int jmax = did_leftturn ? i+1 : 1;
-        for (int j=0; j<jmax; j++) {
+        int j = -(border_width-i-1);
+        if (j < (slope_b*(i+0.5)-0.5)) {
+            j = ceil(slope_b*(i+0.5)-0.5);
+        }
+        while (j <= (slope_e*(i+0.5))+0.5) {
+            if (j > border_width-i-1) break;
+            if (j>=3) break;
+            
             int px = cursor.x + i*dxi + j*dxj;
             int py = cursor.y + i*dyi + j*dyj;
             int idx = get_idx(xydata, px, py);
-            if (idx<0) continue;
+            if (idx<0) {
+                j++;
+                continue;
+            }
             
-            // payload
             float alpha = 1.0; //FIXME
-            float dist = i+j+alpha - 0.5;
+            float dist = sqrt(i*i + j*j) + alpha - 0.5;
             if (dist <= 1e-10) dist = 1e-10;
             
             if (xydata.dist[idx] > dist) {
                 xydata.dist[idx] = dist;
-                // normal is perpendicular to tangent!
-                // also y axis in our float world points upward
-                float deltax = bp_B.y - bp_A.y;
-                float deltay = bp_B.x - bp_A.x;
-                float norm = sqrt(deltax*deltax + deltay*deltay);
-                deltax /= norm;
-                deltay /= norm;
-                
-                // correction for "lattice spacing"
-                dist *=fmax(fabs(deltax), fabs(deltay));
-                
-                // illumination vector (0, 1)
-                float cosphi = (deltax*0.0) + (deltay*1.0);
                 
                 float amount = (border_width/dist);
-                amount = 256*rel_strength*amount*amount * cosphi;
+                amount = fmin(256*rel_strength*amount*amount, max_strength) * cosphi;
+                printf("amount %f\n", amount);
                 xydata.img[idx] = adjust_pixel(xydata.orig_img[idx], amount);
             }
+            j++;
         }
     }
 }
@@ -216,6 +258,7 @@ EXPORT void fill(LONG value, LONG array[], uint64_t array_size) {
 }
 
 EXPORT void outline(LONG img[], int width, int height) {
+    printf("start outline\n");
     int did_leftturn;
     
     XYData xydata;
@@ -249,6 +292,7 @@ EXPORT void outline(LONG img[], int width, int height) {
     backlog[0] = startpoint;
     backlog_pos = 0;
     
+    printf("enter main loop\n");
     // safety net: exit after 200k steps
     int cnt=0;
     const int maxcnt = 200000;
