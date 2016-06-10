@@ -29,9 +29,11 @@ a = QApplication(sys.argv)
 myImage = QImage()
 myImage.load("puzzles/outtest/pieces/piece15.png")
 
-outline(myImage.bits(), myImage.width(), myImage.height())
+w, h = myImage.width(), myImage.height()
+
+outline(myImage.bits(), w, h)
 
 myLabel = QLabel()
-myLabel.setPixmap(QPixmap.fromImage(myImage))
+myLabel.setPixmap(QPixmap.fromImage(myImage.scaled(5*w, 5*h)))
 myLabel.show()
 a.exec_()
