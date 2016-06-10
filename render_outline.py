@@ -25,7 +25,7 @@ class _RenderSettings(Structure):
     
     
 if cfuncs:
-    def outline(qimage, border_width=None, illum_angle=0, rel_strength=.015, max_strength=144):
+    def outline(qimage, border_width=None, illum_angle=0, rel_strength=.015, max_strength=120):
         '''add piece outline to the given qimage.
         border_width gives a relative scale for the border. Leave at None to auto-set.
         illum_angle is the angle where the light comes from in degrees, 0=up, clockwise.
