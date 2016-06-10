@@ -3,7 +3,7 @@ import struct
 from ctypes import cdll, create_string_buffer, c_ulonglong, c_ulong, Structure, c_int, c_float
 base = sys.path[0]
 
-sofile = os.path.join(base, 'cfuncs.so')
+sofile = os.path.join(base, 'render_outline.so')
 print('loading cfuncs from %s'%sofile)
 try:
     cfuncs = cdll.LoadLibrary(sofile)
