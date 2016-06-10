@@ -1,5 +1,6 @@
 import os, sys
-from ctypes import cdll, create_string_buffer, c_ulonglong, c_ulong
+import struct
+from ctypes import cdll, create_string_buffer, c_ulonglong, c_ulong, Structure, c_int, c_float
 base = sys.path[0]
 
 sofile = os.path.join(base, 'cfuncs.so')
@@ -10,19 +11,25 @@ except OSError:
     print('could not import cfuncs')
     sys.exit(1)
     
-def fill(value, imgptr, width, height):
-    cfuncs.fill(value, c_ulonglong(imgptr), c_ulonglong(width*height))
+class _RenderSettings(Structure):
+    _fields_ = [
+        ("border_width", c_int),
+        ("max_strength", c_int),
+        ("rel_strength", c_float),
+        ("illum_x", c_float),
+        ("illum_y", c_float),
+    ]
+    
+class RenderSettings(object):
+    def __init__(self, border_width, illum_x=0, illum_y=-1, rel_strength=.015, max_strength=144):
+        self._settings = _RenderSettings(int(border_width), max_strength, rel_strength, illum_x, illum_y)
+        
+    def get_struct(self):
+        return self._settings
+    
+def outline(imgptr, width, height, settings):
+    cfuncs.outline(c_ulonglong(imgptr), c_int(width), c_int(height), settings.get_struct())
 
-def outline(imgptr, width, height):
-    cfuncs.outline(c_ulonglong(imgptr), c_ulong(width), c_ulong(height))
-
-#value = 0xdeadbeef
-#array = create_string_buffer(20)
-#array_size = 5
-
-#cfuncs.fill(value, array, array_size)
-#from binascii import hexlify
-#print(hexlify(array.raw))
 
 from PyQt4.QtGui import QApplication, QImage, QPixmap, QLabel
 a = QApplication(sys.argv)
@@ -30,8 +37,8 @@ myImage = QImage()
 myImage.load("puzzles/outtest/pieces/piece15.png")
 
 w, h = myImage.width(), myImage.height()
-
-outline(myImage.bits(), w, h)
+bw = max(w, h)/20
+outline(myImage.bits(), w, h, RenderSettings(bw, illum_x=-.5, illum_y=-.866))
 
 myLabel = QLabel()
 myLabel.setPixmap(QPixmap.fromImage(myImage.scaled(5*w, 5*h)))

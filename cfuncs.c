@@ -13,7 +13,6 @@
 #define RIGHT 1
 #define LEFT 3
 
-#define SMOOTH_SIZE 20
 
 typedef struct {
     int x;
@@ -28,6 +27,14 @@ typedef struct {
     LONG *orig_img;
     float *dist;
 } XYData;
+
+typedef struct {
+    int border_width;
+    int max_strength;
+    float rel_strength;
+    float illum_x;
+    float illum_y;
+} RenderSettings;
 
 inline LONG adjust_pixel(LONG pixel, int amount) {
     for (int i=0; i<24; i+=8) {
@@ -47,14 +54,14 @@ inline LONG adjust_pixel(LONG pixel, int amount) {
 }
 
 inline int getdx(int dir) {
-    dir = dir % 4;
+    dir = (dir & 3);
     // in:  0  1  2  3
     // out: 1  0 -1  0
     return (dir%2) ? 0 : (1-dir);
 }
 
 inline int getdy(int dir) {
-    dir = dir % 4;
+    dir = (dir & 3);
     // in:  0  1  2  3
     // out: 0  1  0 -1 
     return (dir%2) ? (2-dir) : 0;
@@ -160,7 +167,7 @@ void init_dist_and_origimg(XYData xydata, BorderPoint cursor, int border_width, 
     int dxj = getdx(cursor.dir+RIGHT+RIGHT);
     int dyj = getdy(cursor.dir+RIGHT+RIGHT);
     for (int i=0; i<border_width; i++) {
-        int jmax = did_leftturn ? i+1 : 1;
+        int jmax = did_leftturn ? border_width : 1;
         for (int j=0; j<jmax; j++) {
             int px = cursor.x + i*dxi + j*dxj;
             int py = cursor.y + i*dyi + j*dyj;
@@ -168,16 +175,13 @@ void init_dist_and_origimg(XYData xydata, BorderPoint cursor, int border_width, 
             if (idx<0) continue;
             
             // payload
-            xydata.dist[idx] = border_width+1;
+            xydata.dist[idx] = border_width*2;
             xydata.orig_img[idx] = xydata.img[idx];
         }
     }
 }
 
-void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int backlog_size, int border_width, int did_leftturn) {
-    const float rel_strength = 0.1;
-    const float max_strength = 255;
-    
+void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int backlog_size, RenderSettings rs) {
     // calculate backlog indices.
     // point A: oldest backlog point
     // point B: 2nd-oldest backlog point
@@ -199,7 +203,7 @@ void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int bac
     float ny_e = +(backlog[bp_Z].x - backlog[bp_B].x);
     
     // illumination vector -30deg
-    float cosphi = (nx_b+nx_e)*-0.5 + (ny_b+ny_e)*-0.866;
+    float cosphi = -(nx_b+nx_e)*rs.illum_x - (ny_b+ny_e)*rs.illum_y;
     cosphi /= sqrt((nx_b+nx_e)*(nx_b+nx_e) + (ny_b+ny_e)*(ny_b+ny_e));
     
     // rotate directions as if cursor segment would point right (direction 0).
@@ -217,14 +221,13 @@ void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int bac
     int dyi = getdy(cursor.dir+RIGHT);
     int dxj = getdx(cursor.dir);
     int dyj = getdy(cursor.dir);
-    for (int i=0; i<border_width; i++) {
-        int j = -(border_width-i-1);
+    for (int i=0; i<rs.border_width; i++) {
+        int j = -sqrt(rs.border_width*rs.border_width - i*i);
         if (j < (slope_b*(i+0.5)-0.5)) {
             j = ceil(slope_b*(i+0.5)-0.5);
         }
         while (j <= (slope_e*(i+0.5))+0.5) {
-            if (j > border_width-i-1) break;
-            if (j>=3) break;
+            if (j*j+i*i>rs.border_width*rs.border_width) break;
             
             int px = cursor.x + i*dxi + j*dxj;
             int py = cursor.y + i*dyi + j*dyj;
@@ -241,9 +244,8 @@ void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int bac
             if (xydata.dist[idx] > dist) {
                 xydata.dist[idx] = dist;
                 
-                float amount = (border_width/dist);
-                amount = fmin(256*rel_strength*amount*amount, max_strength) * cosphi;
-                printf("amount %f\n", amount);
+                float amount = (rs.border_width/dist);
+                amount = fmin(256*rs.rel_strength*amount*amount, rs.max_strength) * cosphi;
                 xydata.img[idx] = adjust_pixel(xydata.orig_img[idx], amount);
             }
             j++;
@@ -257,8 +259,16 @@ EXPORT void fill(LONG value, LONG array[], uint64_t array_size) {
     }
 }
 
-EXPORT void outline(LONG img[], int width, int height) {
-    printf("start outline\n");
+EXPORT void outline(LONG img[], int width, int height, RenderSettings render_settings) {
+    /*printf("start outline, settings: bw %d ms %d rs %f ix %f iy %f\n",
+           render_settings.border_width,
+           render_settings.max_strength,
+           render_settings.rel_strength,
+           render_settings.illum_x,
+           render_settings.illum_y
+    );
+    */
+           
     int did_leftturn;
     
     XYData xydata;
@@ -269,8 +279,8 @@ EXPORT void outline(LONG img[], int width, int height) {
     // stage 1: init xydata, 2: render border
     int stage = 1;
     
-    int border_width = width>height ? width/20 : height/20;
-    if (border_width<1) border_width=1;
+    if (render_settings.border_width<1) render_settings.border_width=1;
+    int backlog_size = render_settings.border_width*2;
     
     if (width<1 || height<1) return;
     
@@ -284,7 +294,7 @@ EXPORT void outline(LONG img[], int width, int height) {
         return;
     }
     
-    backlog = (BorderPoint*) malloc(SMOOTH_SIZE*sizeof(BorderPoint));
+    backlog = (BorderPoint*) malloc(backlog_size*sizeof(BorderPoint));
     xydata.dist = (float*) malloc(width*height*sizeof(float));
     xydata.orig_img = (LONG*) malloc(width*height*sizeof(LONG));
     
@@ -292,27 +302,26 @@ EXPORT void outline(LONG img[], int width, int height) {
     backlog[0] = startpoint;
     backlog_pos = 0;
     
-    printf("enter main loop\n");
     // safety net: exit after 200k steps
     int cnt=0;
     const int maxcnt = 200000;
     for (cnt=0; cnt<maxcnt; cnt++) {
         
-        backlog_pos = (backlog_pos+1) % SMOOTH_SIZE;
+        backlog_pos = (backlog_pos+1) % backlog_size;
         if (backlog_pos==0) backlog_full = TRUE;
         cursor = move_to_next(xydata, cursor);
         //printf("%d %d %d\n", cursor.x, cursor.y, cursor.dir);
         backlog[backlog_pos] = cursor;
         if (cursor.x < 0) break;
         
-        did_leftturn = ((cursor.dir+RIGHT)%3 == backlog[(backlog_pos+SMOOTH_SIZE-1) % SMOOTH_SIZE].dir);
         
         if (stage==1) {
             // stage 1: init arrays where necessary
-            init_dist_and_origimg(xydata, cursor, border_width, did_leftturn);
+            did_leftturn = (((cursor.dir+RIGHT)& 3) == backlog[(backlog_pos+backlog_size-1) % backlog_size].dir);
+            init_dist_and_origimg(xydata, cursor, render_settings.border_width, did_leftturn);
             if (cursor.x == startpoint.x && cursor.y == startpoint.y && cursor.dir == startpoint.dir) {
                 stage=2;
-                printf("enter stage 2 at cnt=%d", cnt);
+                //printf("enter stage 2 at cnt=%d", cnt);
             }
         }
         else {
@@ -320,7 +329,7 @@ EXPORT void outline(LONG img[], int width, int height) {
             if (!backlog_full) break;
             
             // stage 2: render border
-            render_border(xydata, backlog, backlog_pos, SMOOTH_SIZE, border_width, did_leftturn);
+            render_border(xydata, backlog, backlog_pos, backlog_size, render_settings);
             
             if (cursor.x == startpoint.x && cursor.y == startpoint.y) break;
         }
