@@ -206,6 +206,17 @@ void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int bac
     float cosphi = -(nx_b+nx_e)*rs.illum_x - (ny_b+ny_e)*rs.illum_y;
     cosphi /= sqrt((nx_b+nx_e)*(nx_b+nx_e) + (ny_b+ny_e)*(ny_b+ny_e));
     
+    
+    float alpha;
+    int idx = get_idx(xydata, cursor.x, cursor.y);
+    if (idx<0) {
+        alpha=0;
+    }
+    else {
+        alpha = (xydata.orig_img[idx] & 0xff000000) >> 24;
+        alpha /= 255.0;
+    }
+    
     // rotate directions as if cursor segment would point right (direction 0).
     rotatef(&nx_b, &ny_b, -cursor.dir);
     rotatef(&nx_e, &ny_e, -cursor.dir);
@@ -231,15 +242,14 @@ void render_border(XYData xydata, BorderPoint* backlog, int backlog_pos, int bac
             
             int px = cursor.x + i*dxi + j*dxj;
             int py = cursor.y + i*dyi + j*dyj;
-            int idx = get_idx(xydata, px, py);
+            idx = get_idx(xydata, px, py);
             if (idx<0) {
                 j++;
                 continue;
             }
             
-            float alpha = 1.0; //FIXME
             float dist = sqrt(i*i + j*j) + alpha - 0.5;
-            if (dist <= 1e-10) dist = 1e-10;
+            if (dist <= 1e-5) dist = 1e-5;
             
             if (xydata.dist[idx] > dist) {
                 xydata.dist[idx] = dist;
