@@ -341,7 +341,7 @@ EXPORT void outline(LONG img[], int width, int height, RenderSettings render_set
             // stage 2: render border
             render_border(xydata, backlog, backlog_pos, backlog_size, render_settings);
             
-            if (cursor.x == startpoint.x && cursor.y == startpoint.y) break;
+            if (cursor.x == startpoint.x && cursor.y == startpoint.y && cursor.dir == startpoint.dir) break;
         }
     }
     if (cnt==maxcnt) printf("Aborted after %d steps", maxcnt);
