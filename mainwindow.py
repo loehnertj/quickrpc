@@ -75,8 +75,8 @@ class MainWindow(QMainWindow):
     def new_puzzle(self):
         if not self._slicer:
             self._slicer=SlicerMain()
+            self._slicer.onFinish = self.load_puzzle
         self._slicer.show()
-        # FIXME: tell slicer to load the puzzle once it is done.
 
     def load_puzzle(self, path):
         if path.endswith("puzzle.json"):
