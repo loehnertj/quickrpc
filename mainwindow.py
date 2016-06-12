@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
         
     def open(self):
         path = QFileDialog.getOpenFileName(self, "Choose Puzzle", "puzzles", "Puzzle files (puzzle.json)")
-        self.load_puzzle(path)
+        if path: self.load_puzzle(path)
         
     def new_puzzle(self):
         if not self._slicer:
