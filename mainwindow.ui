@@ -58,21 +58,6 @@
    <addaction name="menu_Insert"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <widget class="QToolBar" name="toolBar">
-   <property name="windowTitle">
-    <string>toolBar</string>
-   </property>
-   <property name="movable">
-    <bool>false</bool>
-   </property>
-   <attribute name="toolBarArea">
-    <enum>TopToolBarArea</enum>
-   </attribute>
-   <attribute name="toolBarBreak">
-    <bool>false</bool>
-   </attribute>
-   <addaction name="action_view_all"/>
-  </widget>
   <widget class="QDockWidget" name="dock_boxes">
    <property name="enabled">
     <bool>true</bool>

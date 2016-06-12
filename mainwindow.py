@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
         self.ui=Ui_MainWindow()
         self.ui.setupUi(self)
         
-        self.ui.toolBar.addAction(self.ui.dock_boxes.toggleViewAction())
+        #self.ui.toolBar.addAction(self.ui.dock_boxes.toggleViewAction())
         self.ui.dock_boxes.hide()
         mappings = dict(
             actionSave=self.save,
