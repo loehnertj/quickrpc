@@ -10,7 +10,7 @@ L.basicConfig(level='DEBUG')
 # Import Qt modules
 from PyQt4 import QtCore,QtGui
 from PyQt4.QtCore import Qt, QSizeF # , pyqtSignature
-from PyQt4.QtGui import QMainWindow, QFileDialog, QAction, QMessageBox
+from PyQt4.QtGui import QMainWindow, QFileDialog, QAction, QMessageBox, QGraphicsScene
 
 # Import the compiled UI module
 from mainwindowUI import Ui_MainWindow
@@ -21,6 +21,8 @@ from puzzle_scene import PuzzleScene
 
 from puzzleboard.puzzle_board import PuzzleBoard
 from puzzleboard.puzzle_board import as_jsonstring
+
+from slicer.slicer_main import SlicerMain
 
 
 # Create a class for our main window
@@ -40,21 +42,19 @@ class MainWindow(QMainWindow):
             actionReset=self.reset_puzzle,
             actionSelRearrange=self.selection_rearrange,
             actionSelClear=self.selection_clear,
+            actionNewPuzzle=self.new_puzzle,
+            actionOpen=self.open,
         )
         for key,func in mappings.items():
             getattr(self.ui, key).triggered.connect(func)
         
         self.ui.actionAutosave.toggled.connect(self.toggle_autosave)
+        self.ui.mainView.setScene(QGraphicsScene())
 
         # demo code
         
-        self.puzzle_board = PuzzleBoard.from_folder('puzzles/outtest')
-        self.puzzle_board.on_changed = self.on_pb_changed
-        self.scene = PuzzleScene(
-            self.ui.mainView,
-            self.puzzle_board,
-        )
-        self.ui.mainView.setScene(self.scene)
+        
+        self._slicer = None
         
     def closeEvent(self, ev):
         self.ui.mainView.gl_widget.setParent(None)
@@ -65,6 +65,27 @@ class MainWindow(QMainWindow):
         
     def save(self):
         self.puzzle_board.save_state()
+        
+    def open(self):
+        path = QFileDialog.getOpenFileName(self, "Choose Puzzle", "puzzles", "Puzzle files (puzzle.json)")
+        self.load_puzzle(path)
+        
+    def new_puzzle(self):
+        if not self._slicer:
+            self._slicer=SlicerMain()
+        self._slicer.show()
+        # FIXME: tell slicer to load the puzzle once it is done.
+
+    def load_puzzle(self, path):
+        if path.endswith("puzzle.json"):
+            path = os.path.dirname(path)
+        self.puzzle_board = PuzzleBoard.from_folder(path)
+        self.puzzle_board.on_changed = self.on_pb_changed
+        self.scene = PuzzleScene(
+            self.ui.mainView,
+            self.puzzle_board,
+        )
+        self.ui.mainView.setScene(self.scene)
     
     def toggle_autosave(self):
         pass
