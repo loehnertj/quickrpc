@@ -9,7 +9,7 @@ L.basicConfig(level='DEBUG')
 
 # Import Qt modules
 from PyQt4 import QtCore,QtGui
-from PyQt4.QtCore import Qt, QSizeF # , pyqtSignature
+from PyQt4.QtCore import Qt, QSettings # , pyqtSignature
 from PyQt4.QtGui import QMainWindow, QFileDialog, QAction, QMessageBox, QGraphicsScene
 
 # Import the compiled UI module
@@ -51,10 +51,12 @@ class MainWindow(QMainWindow):
         self.ui.actionAutosave.toggled.connect(self.toggle_autosave)
         self.ui.mainView.setScene(QGraphicsScene())
 
-        # demo code
-        
-        
         self._slicer = None
+        
+        settings = QSettings()
+        path = settings.value("LastOpened", "")
+        if path:
+            self.load_puzzle(path)
         
     def closeEvent(self, ev):
         self.ui.mainView.gl_widget.setParent(None)
@@ -86,6 +88,8 @@ class MainWindow(QMainWindow):
             self.puzzle_board,
         )
         self.ui.mainView.setScene(self.scene)
+        settings = QSettings()
+        settings.setValue("LastOpened", path)
     
     def toggle_autosave(self):
         pass
