@@ -57,6 +57,7 @@ class MainWindow(QMainWindow):
         path = settings.value("LastOpened", "")
         if path:
             self.load_puzzle(path)
+        self.ui.actionAutosave.setChecked(settings.value("Autosave", "true")=="true")
         
     def closeEvent(self, ev):
         self.ui.mainView.gl_widget.setParent(None)
@@ -92,7 +93,8 @@ class MainWindow(QMainWindow):
         settings.setValue("LastOpened", path)
     
     def toggle_autosave(self):
-        pass
+        settings = QSettings()
+        settings.setValue("Autosave", self.ui.actionAutosave.isChecked())
     
     def reset_puzzle(self):
         if QMessageBox.Ok != QMessageBox.warning(self, "Reset puzzle", "Really reset the puzzle?", QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Cancel):
