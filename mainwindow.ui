@@ -30,13 +30,14 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>38</height>
+     <height>31</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu_File">
     <property name="title">
      <string>&amp;Puzzle</string>
     </property>
+    <addaction name="actionNewPuzzle"/>
     <addaction name="actionOpen"/>
     <addaction name="actionAutosave"/>
     <addaction name="actionSave"/>
@@ -48,7 +49,7 @@
    </widget>
    <widget class="QMenu" name="menu_Insert">
     <property name="title">
-     <string>&amp;Selection</string>
+     <string>Se&amp;lection</string>
     </property>
     <addaction name="actionSelRearrange"/>
     <addaction name="actionSelClear"/>
@@ -173,6 +174,17 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="actionNewPuzzle">
+   <property name="icon">
+    <iconset theme="document-new"/>
+   </property>
+   <property name="text">
+    <string>&amp;New Puzzle</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
    </property>
   </action>
  </widget>
