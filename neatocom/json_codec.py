@@ -1,7 +1,9 @@
+import logging
+L = lambda: logging.getLogger(__name__)
 import json 
 import base64
 
-from .concepts import Codec, Message
+from .concepts import Codec, Message, DecodeError
 
 class MyJsonEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -26,30 +28,45 @@ class JsonCodec(Codec):
         return data + b'\n'
 
     def decode(self, data):
-        data = data.decode('utf8')
+        try:
+            data = data.decode('utf8')
+        except UnicodeDecodeError as e:
+            return [e], b''
         messages = []
-        message = True
-        while message:
+        data_before_msg = []
+        while data!='':
+            data_before_msg.append(data)
             message, data = self._decode_first(data)
-            if message:
-                messages.append(message)
+            messages.append(message)
             while data.startswith('\n'):
                 data = data[1:]
-        return messages, data
+        # rollback trailing exceptions (might be start of incomplete data)
+        while messages and isinstance(messages[-1], Exception):
+            data = data_before_msg.pop()
+            messages.pop()
+        return messages, data.encode('utf8')
     
     def _decode_first(self, data):
-        # FIXME: detect and skip bad data at begin of stream.
         def obj_hook(val):
             if '__bytes' in val:
-                return base64.b64decode(val['__bytes'].encode('utf8'))
+                return base64.decode(val['__bytes'].encode('utf8'))
             return val
         decoder = MyJsonDecoder(object_hook=obj_hook)
         try:
             jdict, idx = decoder.raw_decode(data)
-        except json.JSONDecodeError:
-            return None, data
-        method = jdict['__method']
+        except json.JSONDecodeError as e:
+            # skip forward to the next opening brace.
+            # add a "sentinel" brace to jump to the end in case of no brace.
+            idx = (data+'{').find('{', 1)
+            baddata, data = data[:idx], data[idx:]
+            return DecodeError('Not a valid json string: "%s"'%baddata), data
+        try:
+            method = jdict['__method']
+        except KeyError:
+            return DecodeError('json dict is missing the __method key'), data[idx:]
         del jdict['__method']
+        if not isinstance(method, str):
+            return DecodeError('given __method is not a string'), data[idx:]
         return Message(method, jdict), data[idx:]
         
         
