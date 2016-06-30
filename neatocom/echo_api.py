@@ -25,4 +25,6 @@ def test():
     t.run()
     
 if __name__=='__main__':
+    import logging
+    logging.basicConfig(level='DEBUG')
     test()
