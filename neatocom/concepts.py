@@ -8,6 +8,10 @@ The concepts are base classes you can build upon.
 * @outgoing, @incoming: decorators for RemoteAPI subclass methods.
 
 '''
+import logging
+L = lambda: logging.getLogger(__name__)
+
+class DecodeError(Exception): pass
 
 class Transport(object):
     ''' abstracts a transport layer, which may be multichannel.
@@ -56,6 +60,10 @@ class Codec(object):
         where [messages] is the list of decoded messages and remainder
         is leftover data (which may contain the beginning of another message).
         
+        If a message cannot be decoded properly, an exception is added in the message list.
+        Decode should never *raise* an error, because in this case the remaining data
+        cannot be retrieved.
+        
         Each message has a .method attribute (string) and a .kwargs attribute (dict),
         meaning exactly what they look like.
         '''
@@ -72,6 +80,10 @@ class RemoteAPI(object):
     
     .codec holds the Codec for (de)serializing data.
     .transport holds the underlying transport.
+    
+    .message_error(exception) is called each time a message cannot be decoded
+    or handled properly
+    By default, it logs the error as warning.
     
     Methods marked as @outgoing are automatically turned into
     messages on call. The method body is executed before sending. (use e.g.
@@ -118,14 +130,22 @@ class RemoteAPI(object):
     def handle_received(self, sender, data):
         messages, remainder = self.codec.decode(data)
         for message in messages:
+            if isinstance(message, Exception):
+                self.message_error(message)
+                continue
             try:
                 method = getattr(self, message.method)
             except AttributeError:
-                raise AttributeError("Incoming call of %s not defined on the api"%message.method)
+                self.message_error(AttributeError("Incoming call of %s not defined on the api"%message.method))
+                continue
             if not hasattr(method, "_remote_api_incoming"):
-                raise AttributeError("Incoming call of %s not marked as @incoming on the api"%message.method)
+                self.message_error(AttributeError("Incoming call of %s not marked as @incoming on the api"%message.method))
+                continue
             method(sender, **message.kwargs)
         return remainder
+    
+    def message_error(self, exception):
+        L().warning(exception)
 
 
 def incoming(unbound_method):
