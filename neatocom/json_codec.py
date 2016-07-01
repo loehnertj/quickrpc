@@ -60,6 +60,8 @@ class JsonCodec(Codec):
             idx = (data+'{').find('{', 1)
             baddata, data = data[:idx], data[idx:]
             return DecodeError('Not a valid json string: "%s"'%baddata), data
+        if not isinstance(jdict, dict):
+            return DecodeError('json toplevel object is not a dict'), data[idx:]
         try:
             method = jdict['__method']
         except KeyError:
