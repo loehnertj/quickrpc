@@ -112,6 +112,9 @@ class RemoteAPI(object):
         * incoming messages are handled on the thread which
             handles Transport receive events. I.e. the
             Transport implementation defines the behaviour.
+            
+    For added neatness, you can .invert() the whole api,
+    swapping incoming and outgoing methods.
     
     '''
     def __init__(self, codec=None, transport=None):
@@ -126,6 +129,22 @@ class RemoteAPI(object):
         self._transport = value
         if self._transport:
             self._transport.set_api(self)
+            
+    def invert(self):
+        '''Swaps @incoming and @outgoing property
+        on all methods if this INSTANCE.
+        
+        I.e. generates the opposite-side API.
+        
+        Do this before connecting any handlers to incoming calls.
+        '''
+        for attr in dir(self):
+            field = getattr(self, attr)
+            if hasattr(field, '_remote_api_incoming') or hasattr(field, '_remote_api_outgoing'):
+                # The decorators add a "method" .inverted() to the field,
+                # whichwill yield the inverse-decorated field.
+                setattr(self, attr, field.inverted())
+        
             
     def handle_received(self, sender, data):
         messages, remainder = self.codec.decode(data)
@@ -160,6 +179,7 @@ def incoming(unbound_method):
     fn.disconnect = lambda listener: fn._listeners.remove(listener)
     fn.__name__ = unbound_method.__name__
     fn.__doc__ = unbound_method.__doc__
+    fn.inverted = lambda: outgoing(unbound_method)
     return fn
 
 
@@ -172,6 +192,8 @@ def outgoing(unbound_method):
         unbound_method(self, receivers=receivers, **kwargs)
         data = self.codec.encode(unbound_method.__name__, kwargs=kwargs)
         self.transport.send(data, receivers=receivers)
+    fn._remote_api_outgoing = None
     fn.__name__ = unbound_method.__name__
     fn.__doc__ = unbound_method.__doc__
+    fn.inverted = lambda: incoming(unbound_method)
     return fn
