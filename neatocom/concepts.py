@@ -143,7 +143,7 @@ class RemoteAPI(object):
             if hasattr(field, '_remote_api_incoming') or hasattr(field, '_remote_api_outgoing'):
                 # The decorators add a "method" .inverted() to the field,
                 # whichwill yield the inverse-decorated field.
-                setattr(self, attr, field.inverted())
+                setattr(self, attr, field.inverted().__get__(self))
         
             
     def handle_received(self, sender, data):
@@ -189,7 +189,7 @@ def outgoing(unbound_method):
     '''
     def fn(self, receivers=None, **kwargs):
         # this ensures that all kwargs are valid
-        unbound_method(self, receivers=receivers, **kwargs)
+        unbound_method(self, receivers, **kwargs)
         data = self.codec.encode(unbound_method.__name__, kwargs=kwargs)
         self.transport.send(data, receivers=receivers)
     fn._remote_api_outgoing = None
