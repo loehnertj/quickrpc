@@ -13,7 +13,8 @@ try:
 except OSError:
     print('could not import %s'%sofile)
     cfuncs = None
-    
+
+
 class _RenderSettings(Structure):
     _fields_ = [
         ("border_width", c_int),
@@ -22,8 +23,8 @@ class _RenderSettings(Structure):
         ("illum_x", c_float),
         ("illum_y", c_float),
     ]
-    
-    
+
+.
 if cfuncs:
     def outline(qimage, border_width=None, illum_angle=0, rel_strength=.015, max_strength=120):
         '''add piece outline to the given qimage.
@@ -36,10 +37,10 @@ if cfuncs:
         w, h = qimage.width(), qimage.height()
         if not border_width:
             border_width = max(w, h)/20
-            
+
         illum_x = math.sin(illum_angle*math.pi/180.)
         illum_y = -math.cos(illum_angle*math.pi/180.)
-            
+
         settings = _RenderSettings(int(border_width), max_strength, rel_strength, illum_x, illum_y)
         cfuncs.outline(c_ulonglong(imgptr), c_int(w), c_int(h), settings)
 else:

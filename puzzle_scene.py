@@ -3,7 +3,6 @@
 
 import os
 import logging
-L = lambda: logging.getLogger(__name__)
 
 from PyQt4.QtCore import Qt, QPointF, QSizeF, QSize, QRectF
 from PyQt4.QtGui import QBrush, QColor, QPen, QPixmap
@@ -13,6 +12,9 @@ from input_tracker import InputTracker
 from cluster_widget import ClusterWidget
 from puzzleboard.puzzle_board import PuzzleBoard
 
+
+L = lambda: logging.getLogger(__name__)
+
 KEYS = {
     # non-drag actions
     'grab': [Qt.LeftButton, Qt.Key_Space],
@@ -21,45 +23,41 @@ KEYS = {
     'rotate_CW': [Qt.RightButton, Qt.Key_D],
     'rotate_CCW': [Qt.Key_A],
     'zoom': [Qt.Key_Q],
-    
+
     # drag actions
     'pan': [Qt.LeftButton, Qt.Key_Space],
     'deselect': [Qt.Key_W],
-    
+
     # both
     'select': [Qt.RightButton, Qt.Key_S],
 }
 
+
 class PuzzleScene(QGraphicsScene):
     def __init__(o, parent, puzzle_board, *args):
         QGraphicsScene.__init__(o, parent, *args)
-        o._input_tracker = InputTracker(o, 
-            accepts=sum(KEYS.values(), [])
-        )
-        
+        o._input_tracker = InputTracker(o, accepts=sum(KEYS.values(), []))
+
         o.setBackgroundBrush(QBrush(QColor("darkGray")))
         o.puzzle_board = puzzle_board
         o.cluster_map = {}
         o._display_puzzle_board(puzzle_board)
-        
-        
+
         # init piece movement
         o.grab_active = False
         o.grabbed_widgets = None
         o.move_grab_offsets = None
         o.move_rotation = 0
         o._old_clusters = set()
-        
+
         # init selection
         o._drag_start = None
         o._rubberband = QGraphicsRectItem(QRectF(0., 0., 100., 100.))
         p = QPen(QColor(255,255,255))
-        #p.setWidth(5)
         o._rubberband.setPen(p)
         o._rubberband.hide()
         o.addItem(o._rubberband)
-        
-        
+
     def _display_puzzle_board(o, puzzle_board):
         for cluster in puzzle_board.clusters:
             cw = ClusterWidget(puzzle_board=puzzle_board, cluster=cluster)
@@ -67,21 +65,18 @@ class PuzzleScene(QGraphicsScene):
             o.cluster_map[cluster] = cw
             cw.updatePos()
         o.updateSceneRect()
-        
-        
+
     def toggle_grab_mode(o, scene_pos, grab_active=None):
         if grab_active is None:
             grab_active = not o.grab_active
-            
         if o.grabbed_widgets:
             if grab_active: return
             o.dropGrabbedWidgets()
         else:
             if not grab_active: return
             o.tryGrabWidgets(scene_pos)
-            
         o.grab_active = bool(o.grabbed_widgets)
-    
+
     def tryGrabWidgets(o, scene_pos):
         item = o.itemAt(scene_pos)
         if item:
@@ -94,14 +89,14 @@ class PuzzleScene(QGraphicsScene):
             o.move_grab_offsets = [w.pos() - scene_pos for w in o.grabbed_widgets]
             o.move_rotation = 0
         L().debug("lift: " + o.grabbed_widgets.__repr__())
-        
+
     def rotateGrabbedWidgets(o, clockwise=False):
         o.move_rotation += (-1 if clockwise else 1)
         for widget in o.grabbed_widgets:
-            r_deg = -360.*(widget.cluster.rotation + o.move_rotation)/widget.cluster.rotations
-            L().debug('new rotation: %g, in deg: %g'%(o.move_rotation, r_deg))
+            r_deg = -360. * (widget.cluster.rotation + o.move_rotation) / widget.cluster.rotations
+            L().debug('new rotation: %g, in deg: %g' % (o.move_rotation, r_deg))
             widget.setRotation(r_deg)
-                
+
     def dropGrabbedWidgets(o):
         for widget in o.grabbed_widgets:
             o.dropWidget(widget)
@@ -110,14 +105,14 @@ class PuzzleScene(QGraphicsScene):
         o.grabbed_widgets = None
         L().debug('dropped')
         o.updateSceneRect()
-            
+
     def dropWidget(o, widget):
         new_pos = widget.pos()
         rotation = (o.move_rotation + widget.cluster.rotation) % widget.cluster.rotations
         if rotation<0:
             rotation += widget.cluster.rotations
         o.puzzle_board.move_cluster(cluster=widget.cluster, x=new_pos.x(), y=new_pos.y(), rotation=rotation)
-        
+
     def checkJoin(o, widget):
         jc = o.puzzle_board.joinable_clusters(widget.cluster)
         if jc:
