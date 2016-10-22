@@ -1,3 +1,5 @@
+import logging
+L = lambda: logging.getLogger(__name__)
 import sys
 from .concepts import Transport
 
@@ -16,6 +18,7 @@ class StdioTransport(Transport):
         while self.running:
             # FIXME: read binary
             data = input().encode('utf8')
+            L().info("received: %r"%data)
             leftover = self.received(sender='stdio', data=leftover + data)
 
 

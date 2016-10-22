@@ -24,9 +24,11 @@ class QProcessTransport(Transport):
         self.process.finished.connect(self.on_finished)
 
     def start(self):
+        L().debug('starting: %r'%self.cmdline)
         self.process.start(self.cmdline)
 
     def send(self, data, receivers=None):
+        L().debug('message to child processs: %s'%data)
         self.process.write(data.decode('utf8'))
 
     def on_ready_read(self):
@@ -34,10 +36,15 @@ class QProcessTransport(Transport):
         errors = self.process.readAllStandardError().data().decode('utf8')
         if errors:
             L().error('Error from child process:\n%s' % errors)
+        pdata = data.decode('utf8')
+        if len(pdata) > 100:
+            pdata = pdata[:100] + '...'
+        if pdata.startswith('{'):
+            L().debug('message from child process: %s'%pdata)
         self.leftover = self.received(
             sender=self.sendername,
             data=self.leftover + data
         )
 
     def on_finished(self):
-        L().info('Child process exited normally')
+        L().info('Child process exited.')
