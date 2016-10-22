@@ -14,6 +14,9 @@ class MyJsonEncoder(json.JSONEncoder):
 class MyJsonDecoder(json.JSONDecoder):
     pass
 
+class AttrDict(dict):
+    __getattr__ = dict.__getitem__
+
 class JsonCodec(Codec):
     '''Json codec: convert to json
     
@@ -49,8 +52,8 @@ class JsonCodec(Codec):
     def _decode_first(self, data):
         def obj_hook(val):
             if '__bytes' in val:
-                return base64.decode(val['__bytes'].encode('utf8'))
-            return val
+                return base64.b64decode(val['__bytes'].encode('utf8'))
+            return AttrDict(val)
         decoder = MyJsonDecoder(object_hook=obj_hook)
         try:
             jdict, idx = decoder.raw_decode(data)
