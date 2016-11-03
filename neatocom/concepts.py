@@ -165,6 +165,18 @@ class RemoteAPI(object):
     
     def message_error(self, exception):
         L().warning(exception)
+        
+    def unhandled_calls(self):
+        '''Generator, returns the names of all *incoming*, unconnected methods.
+        
+        If no results are returned, all incoming messages are connected.
+        '''
+        result = []
+        for attr in dir(self):
+            field = getattr(self, attr)
+            if hasattr(field, '_remote_api_incoming') and not field._listeners:
+                yield attr
+                
 
 
 def incoming(unbound_method):
