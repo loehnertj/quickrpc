@@ -28,6 +28,8 @@ class QProcessTransport(Transport):
         self.process.start(self.cmdline)
 
     def send(self, data, receivers=None):
+        if receivers is not None and self.sendername not in receivers:
+            return
         L().debug('message to child processs: %s'%data)
         self.process.write(data.decode('utf8'))
 
