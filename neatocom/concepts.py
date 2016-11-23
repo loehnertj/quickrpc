@@ -9,15 +9,46 @@ The concepts are base classes you can build upon.
 
 '''
 import logging
+import threading
 L = lambda: logging.getLogger(__name__)
 
 class DecodeError(Exception): pass
 
 class Transport(object):
     ''' abstracts a transport layer, which may be multichannel.
+    
+    Outgoing messages are sent via .send(). (Override!)
+    Incoming messages are passed to api.handle_received().
+    The api must be set beforehand via set_api().
+    
+    There are some facilities in place for threaded transports:
+    - .run() shall run the transport (possibly blocking)
+    - .start() shall start the transport nonblocking
+    - .stop() shall stop the transport gracefully
+    - Bool property .running for state and signaling 
+        (default .stop() sets running to False).
+        
+    - .set_api is used to set the handler. The api must have
+        a method handle_received(sender, data).
+        
     '''
     def __init__(self):
         self._api = None
+        self.running = False
+        
+    def run(self):
+        '''Runs the transport, possibly blocking. Override me.'''
+        self.running = True
+        
+    def start(self):
+        '''Run in a new thread.'''
+        threading.Thread(target=self.run).start()
+    
+    def stop(self):
+        '''Stop running transport (possibly from another thread).
+        
+        By default, sets self.running=False.'''
+        self.running = False
     
     def set_api(self, api):
         '''sets the dispatcher using this transport. Received data is given to the dispatcher.'''
