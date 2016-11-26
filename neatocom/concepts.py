@@ -42,7 +42,7 @@ class Transport(object):
         
     def start(self):
         '''Run in a new thread.'''
-        threading.Thread(target=self.run).start()
+        threading.Thread(target=self.run, name=self.__class__.__name__).start()
     
     def stop(self):
         '''Stop running transport (possibly from another thread).
