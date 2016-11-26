@@ -15,8 +15,15 @@ class TcpServerTransport(MuxTransport):
     connects, the connection is wrapped into a transport and added to the
     muxer.
     
-    There is (for now) no explicit notification about connects/disconnects; 
+    There is (for now) no explicit notification about connects/disconnects;
     use the API for that.
+    
+    Use .close() for server-side disconnect.
+    
+    Threads:
+     - TcpServerTransport.run() blocks (use .start() for automatic extra Thread)
+     - .run() starts a new thread for listening to connections
+     - each incoming connection will start another Thread.
     '''
     def __init__(self, port, interface=''):
         MuxTransport.__init__(self)
