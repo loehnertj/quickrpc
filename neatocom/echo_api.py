@@ -46,8 +46,11 @@ def test():
     mt += server
     print('serving on port 8888')
     api = EchoAPI(codec=JsonCodec(), transport=mt)
+    
+    # on incoming "say", call "echo"
     api.say.connect(lambda sender="", text="": api.echo(text=text))
     
+    # on incoming "quit", differentiate by sender.
     def onquit(sender):
         if sender=='stdio':
             print('Server stops.')
