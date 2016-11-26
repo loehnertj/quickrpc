@@ -2,6 +2,9 @@ import logging
 from collections import namedtuple
 import queue
 
+# only for thread overview in MuxTransport.run()
+import threading
+
 from .concepts import Transport
 
 L = lambda: logging.getLogger(__name__)
@@ -56,7 +59,7 @@ class MuxTransport(Transport):
         
     def remove_transport(self, transport, stop=True):
         '''remove and stop the transport.'''
-        self.transport.remove(transport)
+        self.transports.remove(transport)
         transport.set_api(None)
         if stop:
             transport.stop()
@@ -74,6 +77,7 @@ class MuxTransport(Transport):
         self.running = True
         for transport in self.transports:
             transport.start()
+        L().debug('Thread overview: %s'%([t.name for t in threading.enumerate()],))
         while self.running:
             try:
                 indata = self.in_queue.get(timeout=0.5)
