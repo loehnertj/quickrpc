@@ -23,7 +23,9 @@ class StdioTransport(Transport):
         self.running = True
         leftover = b''
         while self.running:
-            data = self._input()
+            # FIXME: This loses bytes on startup.
+            #data = self._input()
+            data = input().encode('utf8')
             if data is None: 
                 continue
             L().info("received: %r"%data)
