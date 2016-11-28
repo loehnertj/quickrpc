@@ -12,7 +12,8 @@ Enter json messages on the commandline to test stdio transport.
 Use `telnet localhost 8888` to test tcp functionality.
 Use `tail -F echo_api.log` in another terminal to watch logged events.
 '''
-
+import logging
+L = lambda: logging.getLogger(__name__)
 from .concepts import RemoteAPI, incoming, outgoing
 
 
@@ -33,7 +34,8 @@ class EchoAPI(RemoteAPI):
 
 
 def test():
-    from .json_codec import JsonCodec
+    #from .json_codec import JsonCodec
+    from .terse_codec import TerseCodec
     from .stdio_transport import StdioTransport
     from .mux_transport import MuxTransport
     from .tcp_server_transport import TcpServerTransport
@@ -45,7 +47,7 @@ def test():
     server = TcpServerTransport(port=8888) 
     mt += server
     print('serving on port 8888')
-    api = EchoAPI(codec=JsonCodec(), transport=mt)
+    api = EchoAPI(codec=TerseCodec(), transport=mt)
     
     # on incoming "say", call "echo"
     api.say.connect(lambda sender="", text="": api.echo(text=text))
