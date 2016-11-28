@@ -212,7 +212,12 @@ class RemoteAPI(object):
 
 def incoming(unbound_method):
     def fn(self, sender, **kwargs):
-        unbound_method(self, sender, **kwargs)
+        try:
+            unbound_method(self, sender, **kwargs)
+        except TypeError:
+            # signature is wrong
+            L().warning('incoming call with wrong signature, ignored')
+            return
         for listener in fn._listeners:
             listener(sender, **kwargs)
     # Presence of this attribute indicates that this method is a valid incoming target
