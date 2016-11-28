@@ -77,9 +77,10 @@ class _TcpConnection(BaseRequestHandler, Transport):
         leftover = b''
         while self.transport_running.is_set():
             try:
-                data = self.request.recv(1024).strip()
+                data = self.request.recv(1024)
             except timeout:
                 continue
+            data = data.replace(b'\r\n', b'\n')
             if data == b'':
                 # Connection was closed.
                 self.stop()
