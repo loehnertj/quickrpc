@@ -41,8 +41,8 @@ class QProcessTransport(Transport):
         pdata = data.decode('utf8')
         if len(pdata) > 100:
             pdata = pdata[:100] + '...'
-        if pdata.startswith('{'):
-            L().debug('message from child process: %s'%pdata)
+        #if pdata.startswith('{'):
+        L().debug('message from child process: %s'%pdata)
         self.leftover = self.received(
             sender=self.sendername,
             data=self.leftover + data
