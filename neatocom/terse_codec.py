@@ -29,31 +29,22 @@ class TerseCodec(Codec):
         return _encode_method(method, kwargs)
 
     def decode(self, data):
+        lines = data.split(b'\n')
+        leftover = lines.pop()
         messages = []
-        data_before_msg = []
-        while data!=b'':
-            data_before_msg.append(data)
-            message, data = self._decode_first(data)
-            messages.append(message)
-            while data.startswith(b'\n'):
-                data = data[1:]
-        # rollback trailing exceptions (might be start of incomplete data)
-        while messages and isinstance(messages[-1], Exception):
-            data = data_before_msg.pop()
-            messages.pop()
-        return messages, data
-    
-    def _decode_first(self, data):
-        try:
-            method, params, idx = _decode(data)
-        except DecodeError as e:
-            # skip forward to the next newline.
-            # add a "sentinel" newline to jump to the end in case of no nl.
-            idx = (data+b'\n').find(b'\n', 1)
-            baddata, data = data[:idx], data[idx:]
-            return e, data
-        return Message(method, params), data[idx:]
-
+        for line in lines:
+            try:
+                method, params, idx = _decode(line + b'\n')
+            except DecodeError as e:
+                L().warning(e)
+                continue
+            else:
+                if idx <= len(line):
+                    L().warning('_decode left something over: %r'%line[idx:])
+                messages.append(Message(method, params))
+        if leftover:
+            L().debug('leftover data: %r'%(leftover[:50]+b" ... "+leftover[-50:]))
+        return messages, leftover
 
 def _encode_method(method, params):
     return b'%s %s\n'%(
