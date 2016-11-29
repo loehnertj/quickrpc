@@ -74,7 +74,7 @@ def _encode_iterable(l):
 def _encode_dict(d):
     return b'{' + (
         b' '.join(
-            key.encode('utf8') + b':' + _encode_value(value)
+            str(key).encode('utf8') + b':' + _encode_value(value)
             for key, value in d.items()
         )
     ) + b'}'
@@ -97,7 +97,7 @@ def _decode(data):
     return method, params, idx
 
 def _decode_pairs(data, idx, assignchar = b':'):
-    pairs = {}
+    pairs = AttrDict()
     while True:
         idx = _skipws(data, idx)
         # XXX: sentinel chars from other grammar terms!
@@ -117,7 +117,7 @@ def _decode_value(data, idx):
     idx = _skipws(data, idx)
     ch = data[idx:idx+1]
     if ch in b'-.0123456789':
-        return _decode_float(data, idx)
+        return _decode_num(data, idx)
     func = {
         b'[': _decode_list,
         b'{': _decode_dict,
@@ -128,31 +128,32 @@ def _decode_value(data, idx):
         raise DecodeError('Unsupported Value at position %s'%idx)
     return func(data, idx)
 
-def _decode_float(data, idx):
+def _decode_num(data, idx):
     m = re.match(br'-?\d*(\.\d*)?([eE][+-?]\d+)?', data[idx:])
     if not m:
         raise DecodeError('Expected number at position %d'%idx)
+    if b'.' not in m.group() and b'e' not in m.group().lower():
+        return int(m.group()), idx+m.end()
     return float(m.group()), idx+m.end()
 
 def _decode_bytes(data, idx):
-    return _decode_bytes_or_string(data, idx, 'b')
+    try:
+        end = data.index(b"'", idx+1)
+    except ValueError:
+        raise DecodeError('unterminated bytes value at %d'%idx)
+    try:
+        value = base64.b64decode(data[idx+1:end])
+    except binascii.Error:
+        raise DecodeError('invalid base64 string')
+    return value, end+1
 
 def _decode_str(data, idx):
-    return _decode_bytes_or_string(data, idx, 's')
-
-def _decode_bytes_or_string(data, idx, type='b'):
-    qc = b"'" if type=='b' else b'"'
+    qc = b'"'
     idx = _expect(data, idx, qc)
     m = re.match(br'(\\$|[^$])*[$]'.replace(b'$', qc), data[idx:])
     if not m.group():
         raise DecodeError('Expected quoted value at position %d'%idx)
-    if type == 'b':
-        try:
-            value = base64.b64decode(m.group()[:-1])
-        except binascii.Error:
-            raise DecodeError('invalid base64 string')
-    elif type == 's':
-        value = m.group()[:-1].decode('utf8').replace('\\n', '\n').replace('\\"', '\"').replace('\\\\', '\\')
+    value = m.group()[:-1].decode('utf8').replace('\\n', '\n').replace('\\"', '\"').replace('\\\\', '\\')
     return value, idx+m.end()
 
 def _decode_dict(data, idx):
@@ -174,7 +175,7 @@ def _decode_list(data, idx):
     return l, idx
 
 def _decode_identifier(data, idx):
-    m = re.match(br'\s*[a-zA-Z_][a-zA-Z_0-9]*', data[idx:])
+    m = re.match(br'\s*[0-9a-zA-Z_][a-zA-Z_0-9]*', data[idx:])
     if not m:
         raise DecodeError('Expected identifier at position %d'%idx)
     return m.group().strip().decode('utf8'), idx + m.end()
