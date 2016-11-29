@@ -24,8 +24,8 @@ class StdioTransport(Transport):
         leftover = b''
         while self.running:
             # FIXME: This loses bytes on startup.
-            #data = self._input()
-            data = input().encode('utf8') + b'\n'
+            data = self._input()
+            #data = input().encode('utf8') + b'\n'
             if data is None: 
                 continue
             L().info("received: %r"%data)
@@ -36,7 +36,7 @@ class StdioTransport(Transport):
         '''Input with 0.1s timeout. Return None on timeout.'''
         i, o, e = select.select([sys.stdin.buffer], [], [], timeout)
         if i:
-            return sys.stdin.buffer.readline().strip()
+            return sys.stdin.buffer.read1(65536)
         else:
             return None
 
