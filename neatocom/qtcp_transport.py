@@ -1,7 +1,7 @@
 import sys
 import logging
 from PyQt4.QtNetwork import QTcpSocket, QAbstractSocket
-from .concepts import Transport
+from .transports import Transport
 
 L = lambda: logging.getLogger(__name__)
 
