@@ -1,5 +1,5 @@
 import os, sys
-from render_outline import outline
+from qtpuzzle.render_outline import outline
 
 from PyQt4.QtGui import QApplication, QImage, QPixmap, QLabel
 a = QApplication(sys.argv)
