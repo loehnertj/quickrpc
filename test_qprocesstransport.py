@@ -8,7 +8,7 @@ import os, sys
 from PyQt4.QtGui import QApplication, QPushButton
 
 from neatocom.echo_api import EchoAPI
-from neatocom.json_codec import JsonCodec
+from neatocom.codecs import JsonCodec
 from neatocom.qprocess_transport import QProcessTransport
 
 L = lambda: logging.getLogger(__name__)

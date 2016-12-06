@@ -11,40 +11,6 @@ The concepts are base classes you can build upon.
 import logging
 L = lambda: logging.getLogger(__name__)
 
-class DecodeError(Exception): pass
-
-class Message(object):
-    def __init__(self, method, kwargs):
-        self.method = method
-        self.kwargs = kwargs
-
-class Codec(object):
-    '''Responsible for serializing and deserializing method calls.
-    
-    Subclass and override `encode` and `decode`.
-    '''
-    def decode(self, data):
-        '''decode data to method call with kwargs.
-        
-        Return:
-        [messages], remainder
-        where [messages] is the list of decoded messages and remainder
-        is leftover data (which may contain the beginning of another message).
-        
-        If a message cannot be decoded properly, an exception is added in the message list.
-        Decode should never *raise* an error, because in this case the remaining data
-        cannot be retrieved.
-        
-        Each message has a .method attribute (string) and a .kwargs attribute (dict),
-        meaning exactly what they look like.
-        '''
-        pass
-    
-    def encode(self, method, kwargs=None):
-        '''encode a method call with given kwargs.'''
-        pass
-    
-
 
 class RemoteAPI(object):
     '''Describes an API i.e. a set of allowed outgoing and incoming calls.

@@ -11,7 +11,7 @@ import os, sys
 from PyQt4.QtGui import QApplication, QPushButton
 
 from neatocom.echo_api import EchoAPI
-from neatocom.terse_codec import TerseCodec
+from neatocom.codecs import TerseCodec
 from neatocom.qtcp_transport import QTcpTransport
 
 L = lambda: logging.getLogger(__name__)
