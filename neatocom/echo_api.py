@@ -14,7 +14,7 @@ Use `tail -F echo_api.log` in another terminal to watch logged events.
 '''
 import logging
 L = lambda: logging.getLogger(__name__)
-from .concepts import RemoteAPI, incoming, outgoing
+from .remote_api import RemoteAPI, incoming, outgoing
 
 
 class EchoAPI(RemoteAPI):

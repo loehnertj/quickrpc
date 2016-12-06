@@ -1,15 +1,16 @@
-'''Layer concepts for communication.
+'''RemoteAPI: a class whose methods correspond to outgoing / incoming remote calls.
 
-The concepts are base classes you can build upon.
-
-* Transport: describes a channel that can send and receive byte data.
-* Codec: decodes/encodes messages into bytes.
-* RemoteAPI: a class whose methods correspond to outgoing / incoming remote calls.
-* @outgoing, @incoming: decorators for RemoteAPI subclass methods.
+@outgoing, @incoming: decorators for RemoteAPI subclass methods.
 
 '''
 import logging
 L = lambda: logging.getLogger(__name__)
+
+__all__ = [
+    'RemoteAPI',
+    'incoming',
+    'outgoing',
+]
 
 
 class RemoteAPI(object):
