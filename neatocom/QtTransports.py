@@ -1,3 +1,7 @@
+'''transports based on Qt communication classes, running in the Qt event loop.
+'''
+
+
 __all__ = [
     'QProcessTransport',
     'QTcpTransport',
