@@ -36,15 +36,13 @@ class EchoAPI(RemoteAPI):
 def test():
     #from .json_codec import JsonCodec
     from .terse_codec import TerseCodec
-    from .stdio_transport import StdioTransport
-    from .mux_transport import MuxTransport
-    from .tcp_server_transport import TcpServerTransport
+    from .transports import StdioTransport, MuxTransport, TcpServerTransport
     
     L().info('Start echo_api.test')
 
     mt = MuxTransport()
     mt += StdioTransport()
-    server = TcpServerTransport(port=8888) 
+    server = TcpServerTransport(port=8888)
     mt += server
     print('serving on port 8888')
     api = EchoAPI(codec=TerseCodec(), transport=mt)

@@ -9,69 +9,9 @@ The concepts are base classes you can build upon.
 
 '''
 import logging
-import threading
 L = lambda: logging.getLogger(__name__)
 
 class DecodeError(Exception): pass
-
-class Transport(object):
-    ''' abstracts a transport layer, which may be multichannel.
-    
-    Outgoing messages are sent via .send(). (Override!)
-    Incoming messages are passed to api.handle_received().
-    The api must be set beforehand via set_api().
-    
-    There are some facilities in place for threaded transports:
-    - .run() shall run the transport (possibly blocking)
-    - .start() shall start the transport nonblocking
-    - .stop() shall stop the transport gracefully
-    - Bool property .running for state and signaling 
-        (default .stop() sets running to False).
-        
-    - .set_api is used to set the handler. The api must have
-        a method handle_received(sender, data).
-        
-    '''
-    def __init__(self):
-        self._api = None
-        self.running = False
-        
-    def run(self):
-        '''Runs the transport, possibly blocking. Override me.'''
-        self.running = True
-        
-    def start(self):
-        '''Run in a new thread.'''
-        threading.Thread(target=self.run, name=self.__class__.__name__).start()
-    
-    def stop(self):
-        '''Stop running transport (possibly from another thread).
-        
-        By default, sets self.running=False.'''
-        self.running = False
-    
-    def set_api(self, api):
-        '''sets the dispatcher using this transport. Received data is given to the dispatcher.'''
-        self._api = api
-        
-    def send(self, data, receivers=None):
-        '''sends the given data to the specified receiver(s).
-        
-        receivers=None means send to all.
-        '''
-        raise NotImplementedError("Override me")
-    
-    def received(self, sender, data):
-        '''to be called when the subclass received data.
-        For multichannel transports, sender is a unique id identifying the source.
-        
-        If the given data has an undecodable "tail", it is returned.
-        In this case you should prepend the tail to the next received bytes from this channel,
-        because it is probably an incomplete message.
-        '''
-        if not self._api:
-            raise AttributeError("Transport received a message but has no API set.")
-        return self._api.handle_received(sender, data)
 
 class Message(object):
     def __init__(self, method, kwargs):

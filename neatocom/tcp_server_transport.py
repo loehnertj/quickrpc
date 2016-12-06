@@ -3,8 +3,7 @@ import logging
 from socket import timeout
 from socketserver import ThreadingTCPServer, BaseRequestHandler
 from threading import Thread, Event
-from .concepts import Transport
-from .mux_transport import MuxTransport
+from .transports import Transport, MuxTransport
 
 L = lambda: logging.getLogger(__name__)
 
