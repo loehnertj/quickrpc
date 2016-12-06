@@ -9,7 +9,7 @@ from PyQt4.QtGui import QApplication, QPushButton
 
 from neatocom.echo_api import EchoAPI
 from neatocom.codecs import TerseCodec
-from neatocom.qprocess_transport import QProcessTransport
+from neatocom.QtTransports import QProcessTransport
 
 L = lambda: logging.getLogger(__name__)
 
