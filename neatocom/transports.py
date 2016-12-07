@@ -57,13 +57,15 @@ class Transport(object):
         
     def start(self):
         '''Run in a new thread.'''
-        threading.Thread(target=self.run, name=self.__class__.__name__).start()
+        self._thread = threading.Thread(target=self.run, name=self.__class__.__name__)
+        self._thread.start()
     
     def stop(self):
         '''Stop running transport (possibly from another thread).
         
-        By default, sets self.running=False.'''
+        By default, sets self.running=False, then .join()s the thread.'''
         self.running = False
+        self._thread.join()
     
     def set_api(self, api):
         '''sets the dispatcher using this transport. Received data is given to the dispatcher.'''
