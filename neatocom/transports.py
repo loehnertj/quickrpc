@@ -94,7 +94,7 @@ class Transport(object):
 class StdioTransport(Transport):
     def stop(self):
         L().info('StdioTransport.stop() called')
-        self.running=False
+        Transport.stop(self)
 
     def send(self, data, receivers=None):
         if receivers is not None and 'stdio' not in receivers:
@@ -187,7 +187,7 @@ class MuxTransport(Transport):
     
     def stop(self):
         L().info('MuxTransport.stop() called')
-        self.running = False
+        Transport.stop(self)
     
     def run(self):
         L().info('MuxTransport.run() called')
