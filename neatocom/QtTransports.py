@@ -36,6 +36,13 @@ class QProcessTransport(Transport):
     def start(self):
         L().debug('starting: %r'%self.cmdline)
         self.process.start(self.cmdline)
+        
+    def stop(self, kill=False):
+        if kill:
+            self.process.kill()
+        else:
+            self.process.terminate()
+            self.process.waitForFinished()
 
     def send(self, data, receivers=None):
         if receivers is not None and self.sendername not in receivers:
