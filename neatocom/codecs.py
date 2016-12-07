@@ -198,7 +198,8 @@ def _encode_dict(d):
             for key, value in d.items()
         )
     ) + b'}'
-        
+
+
 def _decode(data):
     '''returns method, params, idx OR raises DecodeError.
     identifier params <NL>
@@ -248,13 +249,14 @@ def _decode_value(data, idx):
         raise DecodeError('Unsupported Value at position %s'%idx)
     return func(data, idx)
 
+_num_re = re.compile(br'-?\d*(\.\d*)?([eE][+-?]\d+)?')
 def _decode_num(data, idx):
-    m = re.match(br'-?\d*(\.\d*)?([eE][+-?]\d+)?', data[idx:])
+    m = _num_re.match(data, idx)
     if not m:
         raise DecodeError('Expected number at position %d'%idx)
     if b'.' not in m.group() and b'e' not in m.group().lower():
-        return int(m.group()), idx+m.end()
-    return float(m.group()), idx+m.end()
+        return int(m.group()), m.end()
+    return float(m.group()), m.end()
 
 def _decode_bytes(data, idx):
     try:
@@ -267,14 +269,14 @@ def _decode_bytes(data, idx):
         raise DecodeError('invalid base64 string')
     return value, end+1
 
+_str_re = re.compile(br'(\\"|[^"])*["]')
 def _decode_str(data, idx):
-    qc = b'"'
-    idx = _expect(data, idx, qc)
-    m = re.match(br'(\\$|[^$])*[$]'.replace(b'$', qc), data[idx:])
+    idx = _expect(data, idx, b'"')
+    m = _str_re.match(data, idx)
     if not m.group():
         raise DecodeError('Expected quoted value at position %d'%idx)
     value = m.group()[:-1].decode('utf8').replace('\\n', '\n').replace('\\"', '\"').replace('\\\\', '\\')
-    return value, idx+m.end()
+    return value, m.end()
 
 def _decode_dict(data, idx):
     idx = _expect(data, idx, b'{')
@@ -294,11 +296,12 @@ def _decode_list(data, idx):
     idx = _expect(data, idx, b']')
     return l, idx
 
+_id_re = re.compile(br'.*?(?=[ :\n])')
 def _decode_identifier(data, idx):
-    m = re.match(br'\s*[0-9a-zA-Z_][a-zA-Z_0-9]*', data[idx:])
+    m = _id_re.match(data, idx)
     if not m:
         raise DecodeError('Expected identifier at position %d'%idx)
-    return m.group().strip().decode('utf8'), idx + m.end()
+    return m.group().strip().decode('utf8'), m.end()
 
 def _skipws(data, idx):
     while data[idx:idx+1] == b' ':
