@@ -1,7 +1,6 @@
 '''transports based on Qt communication classes, running in the Qt event loop.
 '''
 
-
 __all__ = [
     'QProcessTransport',
     'QTcpTransport',
@@ -10,7 +9,7 @@ __all__ = [
 import sys
 import logging
 from PyQt4.QtCore import QProcess
-from PyQt4.QtNetwork import QTcpSocket, QAbstractSocket
+from PyQt4.QtNetwork import QUdpSocket, QTcpSocket, QAbstractSocket, QHostAddress
 from .transports import Transport
 
 L = lambda: logging.getLogger(__name__)
@@ -116,6 +115,59 @@ class QTcpTransport(Transport):
         
     def on_connect(self):
          L().info('QTcpSocket: Established connection to %s'%(self.address,))
+
+    def on_error(self, error):
+        L().info('QTcpSocket raised error: %s'%error)
+        
+        
+class QUdpTransport(Transport):
+    '''A Transport sending and receiving UDP datagrams.
+    
+    Connectionless - sender/receiver are IP addresses. Sending and receiving is 
+    done on the same port. Sending with receiver=None makes a broadcast.
+    
+    Received data is processed on the Qt mainloop thread.
+    '''
+    def __init__(self, port):
+        self.port = port
+        self.leftover = b''
+        self.socket = QUdpSocket()
+        self.socket.readyRead.connect(self.on_ready_read)
+        self.socket.error.connect(self.on_error)
+
+    def start(self):
+        if self.socket.state() != QAbstractSocket.UnconnectedState:
+            L().debug('QUdpSocket.start(): Socket is not in UnconnectedState, doing nothing')
+            return
+        L().debug('QUdpTransport: binding to port %d'%(self.port,))
+        self.socket.bind(self.port, QUdpSocket.ShareAddress)
+        
+    def stop(self):
+        self.socket.flush()
+        self.socket.close()
+
+    def send(self, data, receivers=None):
+        L().debug('message to udp server: %s'%data)
+        data = data.decode('utf8')
+        if receivers:
+            for receiver in receivers:
+                self.socket.writeDatagram(data, QHostAddress(receiver), self.port)
+        else:
+            self.socket.writeDatagram(data, QHostAddress.Broadcast, self.port)
+
+    def on_ready_read(self):
+        while self.socket.hasPendingDatagrams():
+            data, host, port = self.socket.readDatagram(self.socket.pendingDatagramSize())
+            assert isinstance(data, bytes)
+            sender = host.toString()
+            pdata = data
+            if len(pdata) > 100:
+                pdata = pdata[:100] + b'...'
+            L().debug('UDP message from %s: %s'%(sender, pdata))
+            self.leftover = self.received(
+                sender=sender,
+                data=self.leftover + data
+            )
 
     def on_error(self, error):
         L().info('QTcpSocket raised error: %s'%error)
