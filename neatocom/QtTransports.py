@@ -126,6 +126,8 @@ class QUdpTransport(Transport):
     Connectionless - sender/receiver are IP addresses. Sending and receiving is 
     done on the same port. Sending with receiver=None makes a broadcast.
     
+    Use messages > 500 Byte at your own peril.
+    
     Received data is processed on the Qt mainloop thread.
     '''
     def __init__(self, port):
