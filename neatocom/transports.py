@@ -8,7 +8,7 @@ Classes defined here:
  * StdioTransport: reads from stdin, writes to stdout.
  * MuxTransport: a transport that multiplexes several sub-transports.
  * TcpServerTransport: a transport that accepts tcp connections and muxes 
-    them into one transport. Actually a forward to neatocom.tcp_server_transport.
+    them into one transport. Actually a forward to neatocom.network_transports.
 
 '''
 
@@ -213,5 +213,5 @@ class MuxTransport(Transport):
             
 
 def TcpServerTransport(port, interface=''):
-    from .tcp_server_transport import TcpServerTransport
+    from .network_transports import TcpServerTransport
     return TcpServerTransport(port, interface)
