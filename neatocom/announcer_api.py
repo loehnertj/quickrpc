@@ -1,5 +1,5 @@
 
-__all__ = ['AnnouncerAPI', 'make_announcer', 'make_seeker']
+__all__ = ['AnnouncerAPI', 'make_announcer', 'make_udp_announcer']
 
 import logging
 from .remote_api import RemoteAPI, incoming, outgoing
@@ -60,3 +60,13 @@ def make_announcer(transport, description='', filter_func=None, codec=TerseCodec
             api.advertise(receivers=[sender], description=description)
     api.seek.connect(on_seek)
     return api
+
+
+def make_udp_announcer(port, description='', filter_func=None, codec=TerseCodec()):
+    '''makes an annoncer using UdpTransport(port) and returns it.
+    
+    Start/stop with announcer.transport.start() / .stop().
+    '''
+    from .network_transports import UdpTransport
+    transport = UdpTransport(port)
+    return make_announcer(transport, description, filter_func, codec)
