@@ -55,9 +55,11 @@ class RemoteAPI(object):
     swapping incoming and outgoing methods.
     
     '''
-    def __init__(self, codec=None, transport=None):
+    def __init__(self, codec=None, transport=None, invert=False):
         self.codec = codec
         self.transport = transport
+        if invert:
+            self.invert()
         
     @property
     def transport(self):
@@ -80,7 +82,7 @@ class RemoteAPI(object):
             field = getattr(self, attr)
             if hasattr(field, '_remote_api_incoming') or hasattr(field, '_remote_api_outgoing'):
                 # The decorators add a "method" .inverted() to the field,
-                # whichwill yield the inverse-decorated field.
+                # which will yield the inverse-decorated field.
                 setattr(self, attr, field.inverted().__get__(self))
         
             
