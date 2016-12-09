@@ -71,21 +71,30 @@ class TcpServerTransport(MuxTransport):
     
     Use .close() for server-side disconnect.
     
+    You can optionally pass an announcer (as returned by announcer_api.make_udp_announcer).
+    It will be started/stopped together with the TcpServerTransport.
+    
     Threads:
      - TcpServerTransport.run() blocks (use .start() for automatic extra Thread)
      - .run() starts a new thread for listening to connections
      - each incoming connection will start another Thread.
     '''
-    def __init__(self, port, interface=''):
-        MuxTransport.__init__(self)
+    def __init__(self, port, interface='', announcer=None):
         self.addr = (interface, port)
+        self.announcer = announcer
+        MuxTransport.__init__(self)
         
     def run(self):
         server = ThreadingTCPServer(self.addr, _TcpConnection, bind_and_activate=True)
         server.mux = self
         Thread(target=server.serve_forever, name="TcpServerTransport_Listen").start()
+        if self.announcer:
+            self.announcer.transport.start()
         
         MuxTransport.run(self)
+        
+        if self.announcer:
+            self.announcer.transport.stop()
         
         server.shutdown()
         

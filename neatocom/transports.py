@@ -212,6 +212,6 @@ class MuxTransport(Transport):
         L().info('MuxTransport has finished')
             
 
-def TcpServerTransport(port, interface=''):
+def TcpServerTransport(port, interface='', announcer=None):
     from .network_transports import TcpServerTransport
-    return TcpServerTransport(port, interface)
+    return TcpServerTransport(port, interface, announcer)
