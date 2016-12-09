@@ -1,11 +1,63 @@
+__all__ = ['UdpTransport', 'TcpServerTransport']
+
 import logging
 
-from socket import timeout
+import socket as sk
 from socketserver import ThreadingTCPServer, BaseRequestHandler
 from threading import Thread, Event
 from .transports import Transport, MuxTransport
 
 L = lambda: logging.getLogger(__name__)
+
+class UdpTransport(Transport):
+    '''transport that communicates over UDP datagrams.
+    
+    Connectionless - sender/receiver are IP addresses. Sending and receiving is 
+    done on the same port. Sending with receiver=None makes a broadcast.
+    
+    Use messages > 500 Bytes at your own peril.
+    '''
+    def __init__(self, port):
+        Transport.__init__(self)
+        self.port = port
+        self.socket = sk.socket(sk.AF_INET, sk.SOCK_DGRAM)
+        self.socket.settimeout(0.5)
+        self.socket.setsockopt(sk.SOL_SOCKET, sk.SO_BROADCAST, 1)
+        self.socket.setsockopt(sk.SOL_SOCKET, sk.SO_REUSEADDR, 1)
+        try:
+            self.socket.setsockopt(sk.SOL_SOCKET, sk.SO_REUSEPORT, 1)
+        except AttributeError:
+            # SO_REUSEPORT not available.
+            pass
+        
+    def start(self):
+        self.socket.bind(('', self.port))
+        Transport.start(self)
+        
+    def stop(self):
+        Transport.stop(self)
+        
+    def run(self):
+        self.running = True
+        while self.running:
+            try:
+                data, addr = self.socket.recvfrom(2048)
+            except sk.timeout:
+                continue
+            host, port = addr
+            # not using leftover data  here, since udp packets are
+            # not guaranteed to arrive in order.
+            self.received(data=data, sender=host)
+        self.socket.close()
+    
+    def send(self, data, receivers=None):
+        L().debug('message to udp server: %s'%data)
+        if receivers:
+            for receiver in receivers:
+                self.socket.sendto(data, (receiver, self.port))
+        else:
+            self.socket.sendto(data, ('<broadcast>', self.port))
+        
 
 class TcpServerTransport(MuxTransport):
     '''transport that accepts TCP connections as transports.
@@ -77,7 +129,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
         while self.transport_running.is_set():
             try:
                 data = self.request.recv(1024)
-            except timeout:
+            except sk.timeout:
                 continue
             data = data.replace(b'\r\n', b'\n')
             if data == b'':

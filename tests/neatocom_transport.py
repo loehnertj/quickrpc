@@ -11,8 +11,8 @@ Don't use with StdioTransport or it is your own fault.
 import logging
 L = lambda: logging.getLogger(__name__)
 
-from neatocom.network_transports import TcpServerTransport
-transport = TcpServerTransport(port=8888)
+from neatocom.network_transports import UdpTransport
+transport = UdpTransport(port=8889)
 
 def run(transport):
     def handler(sender, received):
