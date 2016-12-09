@@ -149,7 +149,7 @@ class QUdpTransport(Transport):
         self.socket.close()
 
     def send(self, data, receivers=None):
-        L().debug('message to udp server: %s'%data)
+        L().debug('message to udp %s: %s'%(receivers,data))
         data = data.decode('utf8')
         if receivers:
             for receiver in receivers:
