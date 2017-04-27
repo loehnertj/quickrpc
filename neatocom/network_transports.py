@@ -24,6 +24,7 @@ class UdpTransport(Transport):
         self.socket.settimeout(0.5)
         self.socket.setsockopt(sk.SOL_SOCKET, sk.SO_BROADCAST, 1)
         self.socket.setsockopt(sk.SOL_SOCKET, sk.SO_REUSEADDR, 1)
+        self.socket.setsockopt(sk.SOL_SOCKET, sk.IP_MULTICAST_LOOP, 1)
         try:
             self.socket.setsockopt(sk.SOL_SOCKET, sk.SO_REUSEPORT, 1)
         except AttributeError:
@@ -47,11 +48,12 @@ class UdpTransport(Transport):
             host, port = addr
             # not using leftover data  here, since udp packets are
             # not guaranteed to arrive in order.
+            L().debug('message from udp %s: %s'%(host, data))
             self.received(data=data, sender=host)
         self.socket.close()
     
     def send(self, data, receivers=None):
-        L().debug('message to udp server: %s'%data)
+        L().debug('message to udp %r: %s'%(receivers, data))
         if receivers:
             for receiver in receivers:
                 self.socket.sendto(data, (receiver, self.port))
