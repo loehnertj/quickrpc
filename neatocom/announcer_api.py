@@ -57,7 +57,7 @@ def make_announcer(transport, description='', filter_func=None, codec=TerseCodec
     def on_seek(sender, filter=''):
         if filter_func(filter):
             L().info('Sending advertisement to %s'%sender)
-            api.advertise(receivers=[sender], description=description)
+            api.advertise(receivers=None, description=description)
     api.seek.connect(on_seek)
     return api
 
