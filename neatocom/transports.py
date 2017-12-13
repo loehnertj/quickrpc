@@ -96,7 +96,7 @@ class Transport(object):
 
 class StdioTransport(Transport):
     def stop(self):
-        L().info('StdioTransport.stop() called')
+        L().debug('StdioTransport.stop() called')
         Transport.stop(self)
 
     def send(self, data, receivers=None):
@@ -108,7 +108,7 @@ class StdioTransport(Transport):
 
     def run(self):
         '''run, blocking.'''
-        L().info('StdioTransport.run() called')
+        L().debug('StdioTransport.run() called')
         self.running = True
         leftover = b''
         while self.running:
@@ -117,9 +117,9 @@ class StdioTransport(Transport):
             #data = input().encode('utf8') + b'\n'
             if data is None: 
                 continue
-            L().info("received: %r"%data)
+            L().debug("received: %r"%data)
             leftover = self.received(sender='stdio', data=leftover + data)
-        L().info('StdioTransport has finished')
+        L().debug('StdioTransport has finished')
             
     def _input(self, timeout=0.1):
         '''Input with 0.1s timeout. Return None on timeout.'''
@@ -189,11 +189,11 @@ class MuxTransport(Transport):
     __isub__ = remove_transport
     
     def stop(self):
-        L().info('MuxTransport.stop() called')
+        L().debug('MuxTransport.stop() called')
         Transport.stop(self)
     
     def run(self):
-        L().info('MuxTransport.run() called')
+        L().debug('MuxTransport.run() called')
         self.running = True
         for transport in self.transports:
             transport.start()
@@ -212,7 +212,7 @@ class MuxTransport(Transport):
         # stop all transports
         for transport in self.transports:
             transport.stop()
-        L().info('MuxTransport has finished')
+        L().debug('MuxTransport has finished')
             
 
 def TcpServerTransport(port, interface='', announcer=None):
