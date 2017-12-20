@@ -117,7 +117,12 @@ class _TcpConnection(BaseRequestHandler, Transport):
     # BaseRequestHandler overrides
     def __init__(self, request, client_address, server):
         BaseRequestHandler.__init__(self, request, client_address, server)
-        Transport.__init__(self)
+        #Transport.__init__(self)
+        self._api = None
+
+    @property
+    def running(self):
+        return self.transport_running.is_set()
         
     def setup(self):
         self.name = '%s:%s'%self.client_address
