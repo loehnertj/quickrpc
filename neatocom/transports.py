@@ -16,6 +16,7 @@ __all__ = [
     'Transport',
     'StdioTransport',
     'MuxTransport',
+    'RestartingTransport',
     'TcpServerTransport',
 ]
 
@@ -25,6 +26,7 @@ import queue
 import sys
 import select
 import threading
+import time
 L = lambda: logging.getLogger(__name__)
 
 
@@ -218,6 +220,50 @@ class MuxTransport(Transport):
             transport.stop()
         L().debug('MuxTransport has finished')
             
+
+class RestartingTransport(Transport):
+    '''A transport that wraps another transport and keeps restarting it.
+
+    E.g. you can wrap a TcpClientTransport to try reconnecting it.
+    >>> tr = RestartingTransport(TcpClientTransport(*address), check_interval=10)
+
+    check_interval gives the Restart interval in seconds. It may not be kept exactly.
+    It cannot be lower than 1 second. Restarting is attempted as long as the transport is running.
+    
+    Adding a transport changes its API binding to the RestartingTransport.
+    '''
+    def __init__(self, transport, check_interval=10, name=''):
+        self.check_interval = check_interval
+        self.transport = transport
+        self.transport.set_api(self)
+        self._poll_interval = 1
+        self.name = name
+
+    def stop(self):
+        # First stop self!
+        Transport.stop(self)
+
+    def run(self):
+        self.running = True
+        restart_timer = self.check_interval
+        self.transport.start()
+        while self.running:
+            time.sleep(self._poll_interval)
+            if not self.transport.running:
+                restart_timer -= self._poll_interval
+                if restart_timer <= 0:
+                    L().info("trying to restart (%s)"%self.name)
+                    self.transport.start()
+                    restart_timer = self.check_interval
+        self.transport.stop()
+
+    handle_received=Transport.received
+
+    def send(self, data, receivers):
+        if self.transport.running:
+            self.transport.send(data, receivers)
+        else:
+            raise IOError('Transport %s is not running, cannot send message'%(self.name,))
 
 def TcpServerTransport(port, interface='', announcer=None):
     from .network_transports import TcpServerTransport
