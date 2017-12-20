@@ -31,14 +31,8 @@ class UdpTransport(Transport):
             # SO_REUSEPORT not available.
             pass
         
-    def start(self):
-        self.socket.bind(('', self.port))
-        Transport.start(self)
-        
-    def stop(self):
-        Transport.stop(self)
-        
     def run(self):
+        self.socket.bind(('', self.port))
         self.running = True
         while self.running:
             try:
