@@ -17,7 +17,9 @@ __all__ = [
     'StdioTransport',
     'MuxTransport',
     'RestartingTransport',
+    'RestartingTcpClientTransport',
     'TcpServerTransport',
+    'TcpClientTransport',
 ]
 
 from collections import namedtuple
@@ -265,6 +267,15 @@ class RestartingTransport(Transport):
         else:
             raise IOError('Transport %s is not running, cannot send message'%(self.name,))
 
+def RestartingTcpClientTransport(host, port, check_interval=10):
+    '''Convenience wrapper for the most common use case. Returns TcpClientTransport wrapped in a RestartingTransport.'''
+    t = TcpClientTransport(host, port)
+    return RestartingTransport(t, check_interval=check_interval, name=t.name)
+
 def TcpServerTransport(port, interface='', announcer=None):
     from .network_transports import TcpServerTransport
     return TcpServerTransport(port, interface, announcer)
+
+def TcpClientTransport(host, port):
+    from .network_transports import TcpClientTransport
+    return TcpClientTransport(host, port)
