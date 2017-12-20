@@ -141,7 +141,9 @@ class _TcpConnection(BaseRequestHandler, Transport):
                 data = self.request.recv(1024)
             except sk.timeout:
                 continue
-            data = data.replace(b'\r\n', b'\n')
+            except ConnectionResetError:
+                data = b''
+            #data = data.replace(b'\r\n', b'\n')
             if data == b'':
                 # Connection was closed.
                 self.stop()
