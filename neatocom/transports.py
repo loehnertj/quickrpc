@@ -66,9 +66,13 @@ class Transport(object):
         By default, sets self.running=False, then .join()s the thread.'''
         self.running = False
         try:
-            self._thread.join()
+            thread = self._thread
         except AttributeError:
             pass
+        else:
+            # If cross-thread stop, wait until actually stopped.
+            if thread is not threading.current_thread():
+                self._thread.join()
     
     def set_api(self, api):
         '''sets the dispatcher using this transport. Received data is given to the dispatcher.'''
