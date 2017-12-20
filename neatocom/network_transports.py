@@ -146,6 +146,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
             #data = data.replace(b'\r\n', b'\n')
             if data == b'':
                 # Connection was closed.
+                L().info('Connection to %s closed by remote side.'%(self.name,))
                 self.stop()
                 break
             L().debug('data from %s: %r'%(self.name, data))
