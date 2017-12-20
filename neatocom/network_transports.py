@@ -167,7 +167,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
         
     def send(self, data, receivers=None):
         if not self.transport_running.is_set():
-            raise Exception('Tried to send over non-running transport!')
+            raise IOError('Tried to send over non-running transport!')
         if receivers is not None and not self.name in receivers:
             return
         # FIXME: do something on failure
