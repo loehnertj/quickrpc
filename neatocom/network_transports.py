@@ -1,4 +1,4 @@
-__all__ = ['UdpTransport', 'TcpServerTransport']
+__all__ = ['UdpTransport', 'TcpServerTransport', 'TcpClientTransport']
 
 import logging
 
@@ -54,6 +54,59 @@ class UdpTransport(Transport):
         else:
             self.socket.sendto(data, ('<broadcast>', self.port))
         
+class TcpClientTransport(Transport):
+    def __init__(self, host, port, connect_timeout=10):
+        Transport.__init__(self)
+        self.address = (host, port)
+        self.name = '%s:%s'%self.address
+        self.connect_timeout = connect_timeout
+
+    def send(self, data, receivers=None):
+        if not self.running:
+            raise IOError('Tried to send over non-running transport!')
+        if receivers is not None and not self.name in receivers:
+            return
+        L().debug('TcpClientTransport .send to %s: %r'%(self.name, data))
+        # FIXME: do something on failure
+        self.socket.sendall(data)
+
+    def run(self):
+        '''run, blocking.'''
+        L().debug('TcpClientTransport.run() called')
+
+        try:
+            self.socket = sk.create_connection(self.address, self.connect_timeout)
+        except ConnectionRefusedError:
+            # FIXME: signal to caller that something went wrong
+            # currently this can only be inferred from .running
+            L().error('Connection to %s failed'%(self.name))
+            return
+        L().info('Connected to %s'%(self.name,))
+        # Sets the timeout for .read and .write
+        self.socket.settimeout(0.5)
+
+        self.running = True
+        leftover = b''
+        while self.running:
+            try:
+                data = self.socket.recv(1024)
+            except sk.timeout:
+                continue
+            #data = data.replace(b'\r\n', b'\n')
+            if data == b'':
+                # Connection was closed.
+                self.running=False
+                self.socket=None
+                L().info('Connection to %s closed by remote side.'%(self.name,))
+                break
+            L().debug('data from %s: %r'%(self.name, data))
+            leftover = self.received(sender=self.name, data=leftover+data)
+
+        if self.socket:
+            L().info('Closing connection to %s.'%(self.name,))
+            self.socket.close()
+        L().debug('TcpClientTransport %s has finished'%(self.name))
+
 
 class TcpServerTransport(MuxTransport):
     '''transport that accepts TCP connections as transports.
