@@ -5,8 +5,8 @@ import logging
 import sys
 L = lambda: logging.getLogger(__name__)
 
-from neatocom.network_transports import UdpTransport
-from neatocom.announcer_api import make_announcer
+from quickrpc.network_transports import UdpTransport
+from quickrpc.announcer_api import make_announcer
 
 def run(port):
     transport = UdpTransport(port=port)

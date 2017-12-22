@@ -11,7 +11,7 @@ Don't use with StdioTransport or it is your own fault.
 import logging
 L = lambda: logging.getLogger(__name__)
 
-from neatocom.network_transports import UdpTransport
+from quickrpc.network_transports import UdpTransport
 transport = UdpTransport(port=8889)
 
 def run(transport):

@@ -2,11 +2,9 @@ import logging
 import base64
 import binascii
 import re
-from .codecs import Message
+from .codecs import Codec, Message, DecodeError
 L = lambda: logging.getLogger(__name__)
 
-
-class DecodeError(Exception): pass
  
 class TerseCodec(Codec):
     '''Terse codec: encodes with minimum puncutation.
@@ -97,7 +95,7 @@ def _decode(data):
     return method, params, idx
 
 def _decode_pairs(data, idx, assignchar = b':'):
-    pairs = AttrDict()
+    pairs = dict()
     while True:
         idx = _skipws(data, idx)
         # XXX: sentinel chars from other grammar terms!

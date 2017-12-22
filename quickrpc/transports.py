@@ -8,7 +8,7 @@ Classes defined here:
  * StdioTransport: reads from stdin, writes to stdout.
  * MuxTransport: a transport that multiplexes several sub-transports.
  * TcpServerTransport: a transport that accepts tcp connections and muxes 
-    them into one transport. Actually a forward to neatocom.network_transports.
+    them into one transport. Actually a forward to quickrpc.network_transports.
 
 '''
 

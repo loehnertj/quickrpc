@@ -1,18 +1,15 @@
-'''Tests connecting via QTcpTransport.
+'''Tests connecting via QProcessTransport.
 
 Connects to inverted echo echo_api and says something.
-
-!!! Echo server must be running !!!
-(python3 -m neatocom.echo_api)
 '''
 import logging
 import os, sys
 
 from PyQt4.QtGui import QApplication, QPushButton
 
-from neatocom.echo_api import EchoAPI
-from neatocom.codecs import TerseCodec
-from neatocom.QtTransports import QTcpTransport
+from quickrpc.echo_api import EchoAPI
+from quickrpc.codecs import TerseCodec
+from quickrpc.QtTransports import QProcessTransport
 
 L = lambda: logging.getLogger(__name__)
 
@@ -39,7 +36,7 @@ def test():
     a = QApplication(sys.argv)
 
     python = sys.executable
-    transport = QTcpTransport('localhost', 8888)
+    transport = QProcessTransport('%s -m quickrpc.echo_api' % python)
     api = EchoAPI(codec=TerseCodec(), transport=transport)
     api.invert()
     api.echo.connect(on_echo)

@@ -191,3 +191,7 @@ class JsonRpcCodec(Codec):
                     )
         else:
             return DecodeError('Message does not contain method, result or error key.')
+
+def TerseCodec():
+    from .terse_codec import TerseCodec
+    return TerseCodec()

@@ -7,7 +7,7 @@ The message "quit":
  - if coming from stdio, shuts the server down
  - if coming over a tcp connection, makes the server close the connection.
 
-Run with python3 -m neatocom.echo_api.
+Run with python3 -m quickrpc.echo_api.
 Enter json messages on the commandline to test stdio transport.
 Use `telnet localhost 8888` to test tcp functionality.
 Use `tail -F echo_api.log` in another terminal to watch logged events.

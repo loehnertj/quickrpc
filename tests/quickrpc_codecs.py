@@ -1,4 +1,4 @@
-from neatocom.codecs import JsonCodec, TerseCodec
+from quickrpc.codecs import JsonRpcCodec, TerseCodec
 
 _testdata=dict(method="my_method", kwargs={
     'int': 1,
@@ -11,7 +11,7 @@ _testdata=dict(method="my_method", kwargs={
 })
 
 def test_json_codec():
-    jc = JsonCodec()
+    jc = JsonRpcCodec()
     data=jc.encode(**_testdata)
     print(repr(data))
     print()
