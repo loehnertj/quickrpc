@@ -2,28 +2,39 @@ import logging
 import base64
 import binascii
 import re
-from .codecs import Codec, Message, DecodeError
+from .codecs import Codec, Message, Reply, ErrorReply, DecodeError, RemoteError, _fmt_exc
 L = lambda: logging.getLogger(__name__)
 
  
 class TerseCodec(Codec):
     '''Terse codec: encodes with minimum puncutation.
 
-    encodes to: method param1:1, param2:"foo"<NL>
+    encodes to: method[id] param1:1, param2:"foo"<NL>
     values:
         * int/float: 1.0
         * bytes: '(base64-string'
         * str: "python-escaped str"
         * list: [val1 val2 val3 ...]
         * dict: {key1:val1 key2:val2 ...}
+        
+    Reply is encoded to: [id]:value
+    Error is encoded to: [id]! message:"string" details:"string"
 
     * Commands must be terminated by newline. 
     * Newlines, double quote and backslash in strings are escaped as usual
     * Allowed dtypes: int, float, str, bytes (content base64-encoded), list, dict
     '''
-    def encode(self, method, kwargs):
+    def encode(self, method, kwargs, id=0):
         '''encodes the call, including trailing newline'''
-        return _encode_method(method, kwargs)
+        return _encode_method(method, id, kwargs)
+    
+    def encode_reply(self, in_reply_to, result):
+        return b'[%d]:%s'%(in_reply_to.id, _encode_value(result))
+    
+    def encode_error(self, in_reply_to, exception, errorcode=0):
+        text = _encode_value(str(exception))
+        details = _encode_value(_fmt_exc(exception))
+        return b'[%d]! message:%s details:%s'%(in_reply_to.id, text, details)
 
     def decode(self, data):
         lines = data.split(b'\n')
@@ -31,21 +42,22 @@ class TerseCodec(Codec):
         messages = []
         for line in lines:
             try:
-                method, params, idx = _decode(line + b'\n')
+                obj, idx = _decode(line + b'\n')
             except DecodeError as e:
                 L().warning(e)
                 continue
             else:
                 if idx <= len(line):
                     L().warning('_decode left something over: %r'%line[idx:])
-                messages.append(Message(method, params))
+                messages.append(obj)
         if leftover:
             L().debug('leftover data: %r'%(leftover[:50]+b" ... "+leftover[-50:]))
         return messages, leftover
 
-def _encode_method(method, params):
-    return b'%s %s\n'%(
+def _encode_method(method, id, params):
+    return b'%s%s %s\n'%(
         method.encode('utf8'),
+        b'/%d'%id if id>0 else b'',
         b' '.join(
             name.encode('utf8') + b':' + _encode_value(value)
             for name, value in params.items()
@@ -78,21 +90,52 @@ def _encode_dict(d):
 
 
 def _decode(data):
-    '''returns method, params, idx OR raises DecodeError.
+    '''returns object, idx OR raises DecodeError.
     identifier params <NL>
     '''
     idx = 0
     params = {}
+    # skip empty telegrams
     while data[idx:idx+1] == b'\n':
         idx += 1
     if b'\n' not in data:
         raise DecodeError('Incomplete data')
     
+    if data[idx] == b'[':
+        idnum, idx = _decode_idnum(data, idx)
+        if data[idx] == b':':
+            return _decode_reply(data, idx+1, id=idnum)
+        elif data[idx] == b'!':
+            return _decode_error(data, idx+1, id=idnum)
+        else:
+            raise DecodeError('Received invalid reply')
+    
+    return _decode_message(data, idx)
+    
+def _decode_message(data, idx):
     method, idx = _decode_identifier(data, idx)
+    if data[idx] == b'[':
+        id = _decode_idnum(data, idx)
+    else:
+        id = 0
     idx = _skipws(data, idx)
     params, idx = _decode_pairs(data, idx)
     idx = _expect(data, idx, b'\n')
-    return method, params, idx
+    return Message(method, params, id=id), idx
+
+def _decode_reply(data, idx, id):
+    idx = _skipws(data, idx)
+    val, idx = _decode_value(data, idx)
+    idx = _expect(data, idx, b'\n')
+    return Reply(val, id), idx
+
+def _decode_error(data, idx, id):
+    idx = _skipws(data, idx)
+    data, idx = _decode_pairs(data, idx)
+    idx = _expect(data, idx, b'\n')
+    msg = data.get('message', '')
+    details = data.get('details', '')
+    return ErrorReply(message, details), idx
 
 def _decode_pairs(data, idx, assignchar = b':'):
     pairs = dict()
@@ -179,6 +222,14 @@ def _decode_identifier(data, idx):
     if not m:
         raise DecodeError('Expected identifier at position %d'%idx)
     return m.group().strip().decode('utf8'), m.end()
+
+_idnum_re = re.compile(br'\[\d+\]')
+def _decode_idnum(data, idx):
+    m = _idnum_re.match(data, idx)
+    if not m:
+        raise DecodeError('Expected [id] at position %d'%idx)
+    return int(m.group()[1:-1].decode('ascii')), m.end()
+    
 
 def _skipws(data, idx):
     while data[idx:idx+1] == b' ':
