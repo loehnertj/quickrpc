@@ -13,7 +13,7 @@ __all__ = [
     'Message',
     'Reply', 
     'ErrorReply',
-    'JsonrpcError',
+    'RemoteError',
     'JsonRpcCodec',
 ]
 
@@ -30,11 +30,11 @@ _fmt_exc = lambda e: '\n'.join(format_exception(type(e), e, e.__traceback__))
 
 class DecodeError(Exception): pass
 
-class JsonrpcError(Exception):
-    def __init__(self, message, data):
+class RemoteError(Exception):
+    def __init__(self, message, details):
         Exception.__init__(self, message)
         self.message = message
-        self.data = data
+        self.details = details
 
 
 class Message(object):
@@ -183,7 +183,7 @@ class JsonRpcCodec(Codec):
 
         elif 'error' in jdict:
             err = jdict['error']
-            e = JsonrpcError(err.get('message', 'Unknown error'), err.get('data', ''))
+            e = RemoteError(err.get('message', 'Unknown error'), err.get('data', ''))
             return ErrorReply(
                     exception = e,
                     id=jdict.get('id',0),
