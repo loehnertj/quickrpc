@@ -3,11 +3,11 @@ QuickRPC for Python: Small, interoperable, automagic RPC library.
 
 QuickRPC is a library that is designed for quick and painless setup of communication channels and Remote-call protocols.
 
-
+**Python 3 only**
 
 A remote interface is defined like so::
 
-    from quickrpc.remote_api import RemoteAPI
+    from quickrpc.remote_api import RemoteAPI, incoming, outgoing
     from quickrpc.transports import TcpServerTransport
     from quickrpc.codecs import TerseCodec
 
@@ -35,7 +35,7 @@ The interface is used over a `Transport`, which might e.g. be a TCP connection o
 That's it! You could now connect to the server e.g. via telnet::
     
     $ telnet localhost 8888
-    say text="hello"
+    say text:"hello"
     
     
 TODO
