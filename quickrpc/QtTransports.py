@@ -11,6 +11,7 @@ import logging
 from PyQt4.QtCore import QProcess
 from PyQt4.QtNetwork import QUdpSocket, QTcpSocket, QAbstractSocket, QHostAddress
 from .transports import Transport
+from .util import paren_partition
 
 L = lambda: logging.getLogger(__name__)
 
@@ -24,6 +25,14 @@ class QProcessTransport(Transport):
     Data is received from the process's stdout and processed
         on the Qt mainloop thread.
     '''
+    shorthand='qprocess'
+    @classmethod
+    def fromstring(cls, expression):
+        '''qprocess:(<commandline>)'''
+        _, _, expr = expression.partition(':')
+        cmdline, _, _ = paren_partition(expr)
+        return cls(cmdline, sendername=expression)
+
     def __init__(self, cmdline, sendername='qprocess'):
         self.cmdline = cmdline
         self.sendername = sendername
@@ -75,6 +84,13 @@ class QTcpTransport(Transport):
     
     Received data is processed on the Qt mainloop thread.
     '''
+    shorthand='qtcp'
+    @classmethod
+    def fromstring(cls, expression):
+        '''qtcp:<host>:<port>'''
+        _, host, port = expression.split(':')
+        return cls(host=host, port=int(port), sendername=expression)
+
     def __init__(self, host, port, sendername='qtcp'):
         self.address = (host, port)
         self.sendername = sendername
@@ -130,6 +146,13 @@ class QUdpTransport(Transport):
     
     Received data is processed on the Qt mainloop thread.
     '''
+    shorthand='qudp'
+    @classmethod
+    def fromstring(cls, expression):
+        '''qudp:<port>'''
+        _, port = expression.split(':')
+        return cls(port=int(port))
+
     def __init__(self, port):
         self.port = port
         self.leftover = b''

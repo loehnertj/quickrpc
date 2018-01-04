@@ -7,7 +7,8 @@ import logging
 from queue import Queue
 import itertools as it
 import inspect
-from .codecs import Message, Reply, ErrorReply
+from .codecs import Codec, Message, Reply, ErrorReply
+from .transports import Transport
 
 L = lambda: logging.getLogger(__name__)
 
@@ -23,6 +24,10 @@ class RemoteAPI(object):
     
     .codec holds the Codec for (de)serializing data.
     .transport holds the underlying transport.
+
+    Both can also be strings, then Transport.fromstring / Codec.fromstring are used
+    to acquire the respective objects. In this case, transport still needs to be started
+    via api.transport.start().
     
     .message_error(exception, in_reply_to) is called each time a message cannot be decoded
     or handled properly.
@@ -61,7 +66,11 @@ class RemoteAPI(object):
     swapping incoming and outgoing methods.
     
     '''
-    def __init__(self, codec=None, transport=None, invert=False):
+    def __init__(self, codec='jrpc', transport=None, invert=False):
+        if isinstance(codec, str):
+            codec = Codec.fromstring(codec)
+        if isinstance(transport, str):
+            transport = Transport.fromstring(transport)
         self.codec = codec
         self.transport = transport
         # FIXME: limit size of _pending_replies somehow

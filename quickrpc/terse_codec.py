@@ -24,6 +24,13 @@ class TerseCodec(Codec):
     * Newlines, double quote and backslash in strings are escaped as usual
     * Allowed dtypes: int, float, str, bytes (content base64-encoded), list, dict
     '''
+
+    shorthand = 'terse'
+    @classmethod
+    def fromstring(cls, expression):
+        '''terse:'''
+        return cls()
+
     def encode(self, method, kwargs, id=0):
         '''encodes the call, including trailing newline'''
         return _encode_method(method, id, kwargs)

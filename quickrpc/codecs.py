@@ -21,6 +21,7 @@ import logging
 import json 
 import base64
 from traceback import format_exception
+from .util import subclasses
 
 L = lambda: logging.getLogger(__name__)
 
@@ -60,6 +61,25 @@ class Codec(object):
     
     Subclass and override `encode` and `decode`.
     '''
+    # The shorthand to use for string creation.
+    shorthand = ''
+
+    @classmethod
+    def fromstring(cls, expression):
+        '''Creates a codec from a given string expression.
+
+        The expression must be "<shorthand>:<specific parameters>",
+        with shorthand being the wanted Codec's .shorthand property.
+        For the specific parameters, see the respective Codec's .fromstring
+        method.
+        '''
+        shorthand, _, expr = expression.partition(':')
+        for subclass in subclasses(cls):
+            if subclass.shorthand == shorthand:
+                return subclass.fromstring(expression)
+        raise ValueError('Could not find a transport class with shorthand %s'%shorthand)
+
+
     def decode(self, data):
         '''decode data to method call with kwargs.
         
@@ -93,7 +113,11 @@ class Codec(object):
 
     def encode_error(self, in_reply_to, exception, errorcode=0):
         '''encode error caused by the given Message.'''
-    
+
+
+def TerseCodec():
+    from .terse_codec import TerseCodec
+    return TerseCodec()
 
 
 class MyJsonEncoder(json.JSONEncoder):
@@ -113,6 +137,17 @@ class JsonRpcCodec(Codec):
     str values are prepended by "s".
     method name is added as dict param __method.
     '''
+    shorthand = 'jrpc'
+    @classmethod
+    def fromstring(cls, expression):
+        '''jrpc:delimiter
+        
+        delimiter is the character splitting the telegrams and must not occur
+        within any telegram. Default = <null>.
+        '''
+        _, _, delim = expression.partition(':')
+        delim = delim.encode('ascii')
+        return cls(delimiter = delim or b'\0')
 
     def __init__(self, delimiter=b'\0'):
         self.delimiter = delimiter
@@ -192,6 +227,3 @@ class JsonRpcCodec(Codec):
         else:
             return DecodeError('Message does not contain method, result or error key.')
 
-def TerseCodec():
-    from .terse_codec import TerseCodec
-    return TerseCodec()

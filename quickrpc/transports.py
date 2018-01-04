@@ -29,8 +29,9 @@ import sys
 import select
 import threading
 import time
-L = lambda: logging.getLogger(__name__)
+from .util import subclasses, paren_partition
 
+L = lambda: logging.getLogger(__name__)
 
 
 class Transport(object):
@@ -51,9 +52,28 @@ class Transport(object):
         a method handle_received(sender, data).
         
     '''
+    # The shorthand to use for string creation.
+    shorthand = ''
+
     def __init__(self):
         self._api = None
         self.running = False
+        
+    @classmethod
+    def fromstring(cls, expression):
+        '''Creates a transport from a given string expression.
+
+        The expression must be "<shorthand>:<specific parameters>",
+        with shorthand being the wanted transport's .shorthand property.
+        For the specific parameters, see the respective transport's .fromstring
+        method.
+        '''
+        shorthand, _, expr = expression.partition(':')
+        for subclass in subclasses(cls):
+            if subclass.shorthand == shorthand:
+                return subclass.fromstring(expression)
+        raise ValueError('Could not find a transport class with shorthand %s'%shorthand)
+
         
     def run(self):
         '''Runs the transport, possibly blocking. Override me.'''
@@ -103,6 +123,12 @@ class Transport(object):
 
 
 class StdioTransport(Transport):
+    shorthand = 'stdio'
+    @classmethod
+    def fromstring(cls, expression):
+        '''No configuration options, just use "stdio:".'''
+        return cls()
+
     def stop(self):
         L().debug('StdioTransport.stop() called')
         Transport.stop(self)
@@ -155,6 +181,20 @@ class MuxTransport(Transport):
     
     Running/Stopping the MuxTransport also runs/stops all muxed transports.
     '''
+    shorthand='mux'
+    @classmethod
+    def fromstring(cls, expression):
+        '''mux:(<transport1>)(<transport2>)...
+        
+        where <transport1>, .. are again valid transport expressions.
+        '''
+        _, _, params = expression.partition(':')
+        t = cls()
+        while params != '':
+            expr, _, params = paren_partition(params)
+            t.add_transport(Transport.fromstring(expr))
+        return t
+        
     
     def __init__(self):
         self.in_queue = queue.Queue()
@@ -234,6 +274,23 @@ class RestartingTransport(Transport):
     
     Adding a transport changes its API binding to the RestartingTransport.
     '''
+    shorthand='restart'
+    @classmethod
+    def fromstring(cls, expression):
+        '''restart:10:<subtransport>
+
+        10 (seconds) is the restart interval.
+
+        <subtransport> is any valid transport string.
+        '''
+        _, _, expr = expression.partition(':')
+        interval, _, expr = expr.partition(':')
+        return cls(
+                transport=Transport.fromstring(expr),
+                check_interval=10,
+                name=expression
+                )
+
     def __init__(self, transport, check_interval=10, name=''):
         self.check_interval = check_interval
         self.transport = transport

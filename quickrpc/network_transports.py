@@ -9,6 +9,8 @@ from .transports import Transport, MuxTransport
 
 L = lambda: logging.getLogger(__name__)
 
+# FIXME graceful handling of disconnects
+
 class UdpTransport(Transport):
     '''transport that communicates over UDP datagrams.
     
@@ -17,6 +19,13 @@ class UdpTransport(Transport):
     
     Use messages > 500 Bytes at your own peril.
     '''
+    shorthand = 'udp'
+    @classmethod
+    def fromstring(cls, expression):
+        '''udp:1234 - the number being the port for send/receive.'''
+        _, _, rest = expression.partition(':')
+        return cls(port=int(rest))
+
     def __init__(self, port):
         Transport.__init__(self)
         self.port = port
@@ -55,6 +64,14 @@ class UdpTransport(Transport):
             self.socket.sendto(data, ('<broadcast>', self.port))
         
 class TcpClientTransport(Transport):
+    shorthand = 'tcp'
+    @classmethod
+    def fromstring(cls, expression):
+        '''tcp:<host>:<port>'''
+        _, host, port = expression.split(':')
+        # uses default connect timeout
+        return cls(host=host, port=int(port))
+
     def __init__(self, host, port, connect_timeout=10):
         Transport.__init__(self)
         self.address = (host, port)
@@ -128,6 +145,17 @@ class TcpServerTransport(MuxTransport):
      - .run() starts a new thread for listening to connections
      - each incoming connection will start another Thread.
     '''
+    shorthand = 'tcpserv'
+    @classmethod
+    def fromstring(cls, expression):
+        '''tcpserv:<interface>:<port>
+        
+        Leave <interface> empty to listen on all interfaces.
+        '''
+        _, iface, port = expression.split(':')
+        return cls(port=int(port), interface=iface)
+
+
     def __init__(self, port, interface='', announcer=None):
         self.addr = (interface, port)
         self.announcer = announcer
