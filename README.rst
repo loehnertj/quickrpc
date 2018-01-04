@@ -37,6 +37,8 @@ That's it! You could now connect to the server e.g. via telnet::
     $ telnet localhost 8888
     say text:"hello"
     
+(Exit via Ctrl+5 -> "quit")
+    
     
 TODO
 ----
