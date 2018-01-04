@@ -96,7 +96,7 @@ def _decode(data):
     idx = 0
     params = {}
     # skip empty telegrams
-    while data[idx:idx+1] == b'\n':
+    while data[idx:idx+1] in b'\r\n':
         idx += 1
     if b'\n' not in data:
         raise DecodeError('Incomplete data')
@@ -232,7 +232,7 @@ def _decode_idnum(data, idx):
     
 
 def _skipws(data, idx):
-    while data[idx:idx+1] == b' ':
+    while data[idx:idx+1] in b' \r':
         idx += 1
     return idx
     
