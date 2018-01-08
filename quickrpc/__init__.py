@@ -1,8 +1,24 @@
-'''Com library with layer concept.
+'''QuickRPC is a library for quick and painless setup of communication channels and Remote-call protocols.
 
-* Transport: describes a channel that can send and receive byte data.
-* Codec: decodes/encodes messages into bytes.
-* RemoteAPI: a class whose methods correspond to outgoing / incoming remote calls.
+**Python 3 only**
+
+To use QuickRPC, you define a :class:`RemoteAPI` subclass. This is a special 
+interface-like class whose methods define the possible incoming and outgoing 
+calls.
+
+Second, a :class:`~codecs.Codec` is needed to translate method calls into byte strings 
+and vice-versa. This could for example be JSON-RPC or MsgPack codec.
+
+Third, the `RemoteAPI` is bound to a :class:`~transports.Transport`. This is 
+basically a send-and-receive channel out of your program. Predefined transports 
+include Stdio, TCP client and server as well as UDP. Additionally there are 
+wrappers that can merge multiple transports together and restart a failing 
+transport.
+
+Codecs and Transports can be instantiated from a textual definition, so that
+they can easily put in a config file or on the commandline. See
+:func:`transport` (alias of :func:`transports.Transport.fromstring`) and 
+:func:`codec` (alias of :func:`codecs.Codec.fromstring`).
 '''
 
 from . import transports
