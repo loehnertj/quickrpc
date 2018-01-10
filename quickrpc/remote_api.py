@@ -4,7 +4,7 @@
 
 '''
 import logging
-from queue import Queue
+from .promise import Promise
 import itertools as it
 import inspect
 from .codecs import Codec, Message, Reply, ErrorReply
@@ -151,25 +151,24 @@ class RemoteAPI(object):
     def _deliver_reply(self, reply):
         id = reply.id
         try:
-            q = self._pending_replies.pop(id)
+            promise = self._pending_replies.pop(id)
         except KeyError:
             # do not raise, since it cannot be caught by user.
             L().warning('Received reply that was never requested: %r'%(reply,))
 
         if isinstance(reply, Reply):
-            q.put(reply.result)
+            promise.set_result(reply.result)
         else:
-            # do not raise, since it cannot be caught by user.
-            # Instead, put the ErrorReply in the result queue.
-            q.put(reply)
+            # Put the ErrorReply in the result queue.
+            promise.set_exception(reply)
 
     # ---- handling of outgoing messages ----
 
     def _new_request(self):
         call_id = next(self._id_dispenser)
-        q = Queue(1)
-        self._pending_replies[call_id] = q
-        return call_id, q
+        promise = Promise()
+        self._pending_replies[call_id] = promise
+        return call_id, promise
 
     # ---- stuff ----
 
@@ -253,13 +252,13 @@ def outgoing(unbound_method=None, has_reply=False, allow_positional_args=False):
         # this ensures that all args and kwargs are valid
         unbound_method(self, receivers, **kwargs)
         if has_reply:
-            call_id, return_queue = self._new_request()
+            call_id, promise = self._new_request()
         else:
             call_id = 0
         data = self.codec.encode(unbound_method.__name__, kwargs=kwargs, id=call_id)
         self.transport.send(data, receivers=receivers)
         if has_reply:
-            return return_queue
+            return promise
 
     fn._remote_api_outgoing = {'has_reply': has_reply}
     fn.__name__ = unbound_method.__name__
