@@ -38,8 +38,8 @@ class Transport(object):
     ''' abstracts a transport layer, which may be multichannel.
     
     Outgoing messages are sent via .send(). (Override!)
-    Incoming messages are passed to api.handle_received().
-    The api must be set beforehand via set_api().
+    Incoming messages are passed to a callback.
+    The callback must be set before the first message arrives via set_on_received().
     
     There are some facilities in place for threaded transports:
     - .run() shall run the transport (possibly blocking)
@@ -48,15 +48,18 @@ class Transport(object):
     - Bool property .running for state and signaling 
         (default .stop() sets running to False).
         
-    - .set_api is used to set the handler. The api must have
-        a method handle_received(sender, data).
+    - .set_on_received is used to set the handler for received data. 
+        Signature: ``on_received(sender, data)``, where sender is a
+        string describing the origin; data is the received bytes.
+        The function returns leftover bytes (if any), that will be
+        prepended to the next on_received call.
         
     '''
     # The shorthand to use for string creation.
     shorthand = ''
 
     def __init__(self):
-        self._api = None
+        self._on_received = None
         self.running = False
         
     @classmethod
@@ -98,9 +101,9 @@ class Transport(object):
             if thread is not threading.current_thread():
                 self._thread.join()
     
-    def set_api(self, api):
-        '''sets the dispatcher using this transport. Received data is given to the dispatcher.'''
-        self._api = api
+    def set_on_received(self, on_received):
+        '''sets the function to call upon receiving data.'''
+        self._on_received = on_received
         
     def send(self, data, receivers=None):
         '''sends the given data to the specified receiver(s).
@@ -117,9 +120,9 @@ class Transport(object):
         In this case you should prepend the tail to the next received bytes from this channel,
         because it is probably an incomplete message.
         '''
-        if not self._api:
-            raise AttributeError("Transport received a message but has no API set.")
-        return self._api.handle_received(sender, data)
+        if not self._on_received:
+            raise AttributeError("Transport received a message but has no handler set.")
+        return self._on_received(sender, data)
 
 
 class StdioTransport(Transport):
@@ -174,7 +177,7 @@ class MuxTransport(Transport):
     Add Transports via mux_transport += transport.
     Remove via mux_transport -= transport.
     
-    Adding a transport changes its API binding to the mux transport.
+    Adding a transport changes its on_received binding to the mux transport.
     If MuxTransport is already running, the added transport is start()ed by default.
     
     Removing a transport stop()s it by default.
@@ -220,7 +223,7 @@ class MuxTransport(Transport):
     def add_transport(self, transport, start=True):
         '''add and start the transport (if running).'''
         self.transports.append(transport)
-        transport.set_api(self)
+        transport.set_on_received(self.handle_received)
         if start and self.running:
             transport.start()
         return self
@@ -228,7 +231,7 @@ class MuxTransport(Transport):
     def remove_transport(self, transport, stop=True):
         '''remove and stop the transport.'''
         self.transports.remove(transport)
-        transport.set_api(None)
+        transport.set_on_received(None)
         if stop:
             transport.stop()
         return self
@@ -272,7 +275,7 @@ class RestartingTransport(Transport):
     check_interval gives the Restart interval in seconds. It may not be kept exactly.
     It cannot be lower than 1 second. Restarting is attempted as long as the transport is running.
     
-    Adding a transport changes its API binding to the RestartingTransport.
+    Adding a transport changes its on_received handler to the RestartingTransport.
     '''
     shorthand='restart'
     @classmethod
@@ -294,7 +297,7 @@ class RestartingTransport(Transport):
     def __init__(self, transport, check_interval=10, name=''):
         self.check_interval = check_interval
         self.transport = transport
-        self.transport.set_api(self)
+        self.transport.set_on_received(self.received)
         self._poll_interval = 1
         self.name = name
 
@@ -315,8 +318,6 @@ class RestartingTransport(Transport):
                     self.transport.start()
                     restart_timer = self.check_interval
         self.transport.stop()
-
-    handle_received=Transport.received
 
     def send(self, data, receivers):
         if self.transport.running:

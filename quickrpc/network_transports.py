@@ -198,8 +198,9 @@ class _TcpConnection(BaseRequestHandler, Transport):
     # BaseRequestHandler overrides
     def __init__(self, request, client_address, server):
         BaseRequestHandler.__init__(self, request, client_address, server)
+        # circumvent Transport.__init__, since none of the threading logic is used here
         #Transport.__init__(self)
-        self._api = None
+        self._on_received = None
 
     @property
     def running(self):

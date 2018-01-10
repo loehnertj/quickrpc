@@ -88,7 +88,7 @@ class RemoteAPI(object):
     def transport(self, value):
         self._transport = value
         if self._transport:
-            self._transport.set_api(self)
+            self._transport.set_on_received(self.handle_received)
             
     def invert(self):
         '''Swaps @incoming and @outgoing property

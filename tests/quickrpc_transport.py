@@ -18,8 +18,7 @@ def run(transport):
     def handler(sender, received):
         print('Message from <%s>: %s'%(sender, received))
     # Do not do this at home
-    handler.handle_received = handler
-    transport.set_api(handler)
+    transport.set_on_received(handler)
     L().info('starting transport')
     transport.start()
     L().info('good to go')
