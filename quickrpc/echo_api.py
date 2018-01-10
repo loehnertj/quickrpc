@@ -34,7 +34,7 @@ class EchoAPI(RemoteAPI):
 
 
 def test():
-    from .codecs import JsonCodec, TerseCodec
+    from .codecs import JsonRpcCodec, TerseCodec
     from .transports import StdioTransport, MuxTransport, TcpServerTransport
     
     L().info('Start echo_api.test')
