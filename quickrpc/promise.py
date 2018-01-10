@@ -65,9 +65,9 @@ class Promise(object):
         if not self._evt.wait(timeout):
             raise PromiseTimeoutError()
             
-        if state == PromiseState.fulfilled:
+        if self._state == PromiseState.fulfilled:
             return self._result 
-        elif state == PromiseState.failed:
+        elif self._state == PromiseState.failed:
             raise self._result
         else:
             assert False, 'unexpected Promise state'
