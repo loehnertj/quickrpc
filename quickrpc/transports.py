@@ -30,8 +30,12 @@ import select
 import threading
 import time
 from .util import subclasses, paren_partition
+from .promise import Promise, PromiseDoneError
 
 L = lambda: logging.getLogger(__name__)
+
+class TransportException(Exception):
+    '''generic error in a transport'''
 
 
 class Transport(object):
@@ -45,7 +49,7 @@ class Transport(object):
     - .run() shall run the transport (possibly blocking)
     - .start() shall start the transport nonblocking
     - .stop() shall stop the transport gracefully
-    - Bool property .running for state and signaling 
+    - Event .running for state and signaling 
         (default .stop() sets running to False).
         
     - .set_on_received is used to set the handler for received data. 
@@ -61,6 +65,9 @@ class Transport(object):
     def __init__(self):
         self._on_received = None
         self.running = False
+        # This lock guards calls to .start() and .stop().
+        # E.g. someone might try to stop while we are still starting.
+        self._transition_lock = threading.Lock()
         
     @classmethod
     def fromstring(cls, expression):
@@ -77,29 +84,58 @@ class Transport(object):
                 return subclass.fromstring(expression)
         raise ValueError('Could not find a transport class with shorthand %s'%shorthand)
 
+    def open(self):
+        '''open the communication channel. Override me if required.
+        
+        When open() exits, the communication line should be ready for send and receive.
+        '''
         
     def run(self):
         '''Runs the transport, possibly blocking. Override me.'''
         self.running = True
         
-    def start(self):
-        '''Run in a new thread.'''
-        self._thread = threading.Thread(target=self.run, name=self.__class__.__name__)
-        self._thread.start()
     
-    def stop(self):
-        '''Stop running transport (possibly from another thread).
+    def start(self, block=True):
+        '''Run in a new thread.
         
-        By default, sets self.running=False, then .join()s the thread.'''
-        self.running = False
-        try:
-            thread = self._thread
-        except AttributeError:
-            pass
-        else:
-            # If cross-thread stop, wait until actually stopped.
-            if thread is not threading.current_thread():
-                self._thread.join()
+        If block is True, waits until startup is complete, then returns True.
+        Otherwise, returns a promise.
+        
+        If something goes wrong during start, the Exception, like e.g. a 
+        socket.error, is passed through.
+        '''
+        p = Promise()
+        
+        def starter():
+            with self._transition_lock:
+                try:
+                    self.open()
+                except Exception as e:
+                    p.set_exception(e)
+                    return
+                else:
+                    p.set_result(True)
+            self.run()
+                
+        self._thread = threading.Thread(target=starter, name=self.__class__.__name__)
+        self._thread.start()
+        return p.result() if block else p
+    
+    
+    def stop(self, block=True):
+        '''Stop running transport (possibly from another thread).'''
+        with self._transition_lock:
+            self.running = False
+            thread = None
+            try:
+                thread = self._thread
+            except AttributeError:
+                # run() might have been called explicitly.
+                pass
+            else:
+                # If cross-thread stop, wait until actually stopped.
+                if block and thread is not threading.current_thread():
+                    self._thread.join()
     
     def set_on_received(self, on_received):
         '''sets the function to call upon receiving data.'''
@@ -200,6 +236,7 @@ class MuxTransport(Transport):
         
     
     def __init__(self):
+        Transport.__init__(self)
         self.in_queue = queue.Queue()
         self.transports = []
         self.running = False
@@ -243,12 +280,43 @@ class MuxTransport(Transport):
         L().debug('MuxTransport.stop() called')
         Transport.stop(self)
     
-    def run(self):
+    def open(self):
+        '''Start all transports that were added so far.
+        
+        The subtransports are started in parallel, then we wait until all of 
+        them are up.
+        
+        If any transport fails to start, all transports are stopped again,
+        and TransportError is raised. It will have a .exceptions attribute being
+        a list of all failures.
+        '''
+        
         L().debug('MuxTransport.run() called')
-        self.running = True
+        promises = []
+        exceptions = []
+        running = []
         for transport in self.transports:
-            transport.start()
+            promises.append(transport.start(block=False))
+        # wait on all the promises
+        for transport, promise in zip(self.transports, promises):
+            try:
+                if promise.result():
+                    running.append(transport)
+            except Exception as e:
+                exceptions.append(e)
+        if exceptions:
+            # Oh my. Stop everything again.
+            L().error('Some transports failed to start. Aborting.')
+            for transport in running:
+                transport.stop()
+            e = TransportException()
+            e.exceptions = exceptions
+            raise e
+        
         L().debug('Thread overview: %s'%([t.name for t in threading.enumerate()],))
+        
+    def run(self):
+        self.running = True
         while self.running:
             try:
                 indata = self.in_queue.get(timeout=0.5)
@@ -304,18 +372,27 @@ class RestartingTransport(Transport):
     def stop(self):
         # First stop self!
         Transport.stop(self)
+        
+    def _try_start(self):
+        try:
+            self.transport.start()
+        except Exception as e:
+            L().info('RestartingTransport: inner transport could not be started.')
+            
+        
+    def open(self):
+        sel._try_start()
 
     def run(self):
         self.running = True
         restart_timer = self.check_interval
-        self.transport.start()
         while self.running:
             time.sleep(self._poll_interval)
             if not self.transport.running:
                 restart_timer -= self._poll_interval
                 if restart_timer <= 0:
                     L().info("trying to restart (%s)"%self.name)
-                    self.transport.start()
+                    self._try_start()
                     restart_timer = self.check_interval
         self.transport.stop()
 

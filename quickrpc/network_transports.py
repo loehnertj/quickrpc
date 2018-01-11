@@ -29,6 +29,8 @@ class UdpTransport(Transport):
     def __init__(self, port):
         Transport.__init__(self)
         self.port = port
+        
+    def open(self):
         self.socket = sk.socket(sk.AF_INET, sk.SOCK_DGRAM)
         self.socket.settimeout(0.5)
         self.socket.setsockopt(sk.SOL_SOCKET, sk.SO_BROADCAST, 1)
@@ -39,9 +41,9 @@ class UdpTransport(Transport):
         except AttributeError:
             # SO_REUSEPORT not available.
             pass
+        self.socket.bind(('', self.port))
         
     def run(self):
-        self.socket.bind(('', self.port))
         self.running = True
         while self.running:
             try:
@@ -87,21 +89,19 @@ class TcpClientTransport(Transport):
         # FIXME: do something on failure
         self.socket.sendall(data)
 
-    def run(self):
-        '''run, blocking.'''
-        L().debug('TcpClientTransport.run() called')
-
+    def open(self):
+        L().debug('TcpClientTransport.open() called')
         try:
             self.socket = sk.create_connection(self.address, self.connect_timeout)
         except ConnectionRefusedError:
-            # FIXME: signal to caller that something went wrong
-            # currently this can only be inferred from .running
             L().error('Connection to %s failed'%(self.name))
-            return
+            raise
         L().info('Connected to %s'%(self.name,))
         # Sets the timeout for .read and .write
         self.socket.settimeout(0.5)
 
+    def run(self):
+        '''run, blocking.'''
         self.running = True
         leftover = b''
         while self.running:
@@ -161,19 +161,24 @@ class TcpServerTransport(MuxTransport):
         self.announcer = announcer
         MuxTransport.__init__(self)
         
-    def run(self):
-        server = ThreadingTCPServer(self.addr, _TcpConnection, bind_and_activate=True)
-        server.mux = self
-        Thread(target=server.serve_forever, name="TcpServerTransport_Listen").start()
+    def open(self):
+        self.server = ThreadingTCPServer(self.addr, _TcpConnection, bind_and_activate=True)
+        self.server.mux = self
+        Thread(target=self.server.serve_forever, name="TcpServerTransport_Listen").start()
         if self.announcer:
-            self.announcer.transport.start()
+            try:
+                self.announcer.transport.start()
+            finally:
+                self.server.shutdown()
+                
         
+    def run(self):
         MuxTransport.run(self)
         
         if self.announcer:
             self.announcer.transport.stop()
         
-        server.shutdown()
+        self.server.shutdown()
         
     def close(self, name):
         '''close the connection with the given sender/receiver name.
@@ -207,6 +212,11 @@ class _TcpConnection(BaseRequestHandler, Transport):
         return self.transport_running.is_set()
         
     def setup(self):
+        '''called by the ThreadingTCPServer.
+        
+        Adds the connection to the parent muxer, then waits
+        for .start() to be called.
+        '''
         self.name = '%s:%s'%self.client_address
         L().debug('TCP connect from %s'%self.name)
         
