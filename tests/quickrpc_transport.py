@@ -11,8 +11,9 @@ Don't use with StdioTransport or it is your own fault.
 import logging
 L = lambda: logging.getLogger(__name__)
 
-from quickrpc.network_transports import UdpTransport
-transport = UdpTransport(port=8889)
+from quickrpc.network_transports import UdpTransport, TcpClientTransport, TcpServerTransport
+#transport = UdpTransport(port=8889)
+transport = TcpServerTransport(port=8889)
 
 def run(transport):
     def handler(sender, received):
