@@ -1,6 +1,48 @@
-'''RemoteAPI: a class whose methods correspond to outgoing / incoming remote calls.
+'''A `RemoteAPI` is an interface-like class whose methods correspond to remote calls.
 
-@outgoing, @incoming: decorators for RemoteAPI subclass methods.
+Let us start with an example::
+
+    from quickrpc.remote_api import RemoteAPI, incoming, outgoing
+    
+    class MyAPI(RemoteAPI):
+        @incoming
+        def notify(self, sender, arg1=val1, arg2=val2):
+            """notification that something happened"""
+            
+        @outgoing
+        def helloworld(self, receivers, arg1=val1):
+            """Tell everybody that I am here."""
+            
+        @incoming(has_reply=true)
+        def echo(self, sender, text="test"):
+            """returns the text that was sent."""
+
+RemoteAPI is used by subclassing it. Remote methods are defined by the
+``@incoming`` and ``@outgoing`` decorators.
+
+Important:
+    The method body of remote methods must be empty.
+
+This is because by caling ``@outgoing`` methods, you actually issue a call
+over the :class:`Transport` that is bound to the ``RemoteAPI`` at runtime.
+Since the API is meant to be used by both sides (by means of inverting it),
+``@incoming`` methods should be empty, too.
+
+``@incoming`` methods have a ``.connect()`` method to attach an implementation
+to that message. The connected handler has the same signature as the
+``@incoming`` method, except for the ``self`` argument.
+
+By default, all defined calls are resultless (i.e. notifications). To define
+calls with return value, decorate with ``has_reply=True`` kwarg.
+
+When handling such a call on the "incoming" side, your handler's return value
+is returned to the sender. Exceptions are caught and sent as error reply.
+
+On the ``outgoing`` side, the call immediately returns a :class:`Promise` object.
+You then use ``.result()`` to get at the actual result. This will block
+until the result arrived.
+
+(TODO: make blocking call by default, add block=False param for Promises)
 
 '''
 import logging
@@ -57,10 +99,11 @@ class RemoteAPI(object):
     then the connected handlers in the order of registering.
     
     Threading:
+    
         * outgoing messages are sent on the calling thread.
         * incoming messages are handled on the thread which
-            handles Transport receive events. I.e. the
-            Transport implementation defines the behaviour.
+          handles Transport receive events. I.e. the
+          Transport implementation defines the behaviour.
             
     For added neatness, you can .invert() the whole api,
     swapping incoming and outgoing methods.
@@ -83,6 +126,9 @@ class RemoteAPI(object):
         
     @property
     def transport(self):
+        '''gets/sets the transport used to send and receive messages.
+        
+        You can change the transport at runtime.'''
         return self._transport
     @transport.setter
     def transport(self, value):
@@ -97,6 +143,8 @@ class RemoteAPI(object):
         I.e. generates the opposite-side API.
         
         Do this before connecting any handlers to incoming calls.
+        
+        You can achieve the same effect by instantiating with ``invert=True`` kwarg.
         '''
         for attr in dir(self):
             field = getattr(self, attr)
@@ -109,6 +157,7 @@ class RemoteAPI(object):
     # ---- handling of incoming messages ----
 
     def handle_received(self, sender, data):
+        '''called by the Transport when data comes in.'''
         messages, remainder = self.codec.decode(data)
         for message in messages:
             if isinstance(message, Exception):
