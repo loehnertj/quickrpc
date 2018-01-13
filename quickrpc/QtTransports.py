@@ -22,8 +22,9 @@ class QProcessTransport(Transport):
     Start the process using .start().
     
     Sent data is written to the process' stdin.
-    Data is received from the process's stdout and processed
-        on the Qt mainloop thread.
+    
+    Data is received from the process's stdout and processed on the Qt mainloop 
+    thread.
     '''
     shorthand='qprocess'
     @classmethod

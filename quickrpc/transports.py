@@ -1,29 +1,30 @@
 # coding: utf8
-'''A transport abstracts a transport layer, which may be multichannel.
+'''A Transport abstracts a two-way bytestream interface.
 
-For details, see doc of class Transport.
+It can be started and stopped, and send and receive byte sequences
+to one or more receivers.
 
 Classes defined here:
- * Transport: abstract base
- * StdioTransport: reads from stdin, writes to stdout.
- * MuxTransport: a transport that multiplexes several sub-transports.
- * RestartingTransport: a transport that automatically restarts its child.
- * RestartingTcpClientTransport: convenience class
- * TcpServerTransport: a transport that accepts tcp connections and muxes 
-    them into one transport. Actually a forward to quickrpc.network_transports.
- * TcpClientTransport: connects to a TCP server. This is a forward to 
-    quickrpc.network_transports.
+ * :any:`Transport`: abstract base
+ * :any:`MuxTransport`: a transport that multiplexes several sub-transports.
+ * :any:`RestartingTransport`: a transport that automatically restarts its child.
+ * :any:`StdioTransport`: reads from stdin, writes to stdout.
+ * :any:`TcpServerTransport`: a transport that accepts tcp connections and muxes 
+   them into one transport. Actually a forward to quickrpc.network_transports.
+ * :any:`TcpClientTransport`: connects to a TCP server. This is a forward to 
+   quickrpc.network_transports.
+ * :any:`RestartingTcpClientTransport`: a TCP Client that reconnects automatically.
 
 '''
 
 __all__ = [
     'Transport',
-    'StdioTransport',
     'MuxTransport',
     'RestartingTransport',
-    'RestartingTcpClientTransport',
+    'StdioTransport',
     'TcpServerTransport',
     'TcpClientTransport',
+    'RestartingTcpClientTransport',
 ]
 
 from collections import namedtuple
@@ -39,29 +40,31 @@ from .promise import Promise, PromiseDoneError
 L = lambda: logging.getLogger(__name__)
 
 class TransportError(Exception):
-    '''generic error in a transport'''
+    '''Generic Transport-related error.'''
 
 
 class Transport(object):
-    ''' abstracts a transport layer, which may be multichannel.
+    '''A transport abstracts a two-way bytestream interface.
     
-    Outgoing messages are sent via .send(). (Override!)
-    Incoming messages are passed to a callback.
-    The callback must be set before the first message arrives via set_on_received().
+    This is the base class, which provides multithreading logic
+    but no actual communication channel.
     
-    There are some facilities in place for threaded transports:
-    - .run() shall run the transport (possibly blocking)
-    - .start() shall start the transport nonblocking
-    - .stop() shall stop the transport gracefully
-    - Event .running for state and signaling 
-        (default .stop() sets running to False).
+    In a subclass, the following methods must be implemented:
+    
+     * :meth:`send` to send outgoing messages
+     * :meth:`open` to initialize the channel (if necessary)
+     * :meth:`run` to receive messages until it is time to stop.
+    
+    Incoming messages are passed to a callback. It must be set before the first 
+    message arrives via :meth:`set_on_received`.
+    
+    Provided threading functionality:
+    
+    - :meth:`start` opens and runs the channel in a new thread
+    - :meth:`stop` signals :meth:`run` to stop, by setting :attr:`running` to False.
         
-    - .set_on_received is used to set the handler for received data. 
-        Signature: ``on_received(sender, data)``, where sender is a
-        string describing the origin; data is the received bytes.
-        The function returns leftover bytes (if any), that will be
-        prepended to the next on_received call.
-        
+    The classmethod :meth:`fromstring` can be used to create a 
+    :class:`Transport` instance from a string (for enhanced configurability).
     '''
     # The shorthand to use for string creation.
     shorthand = ''
@@ -81,6 +84,10 @@ class Transport(object):
         with shorthand being the wanted transport's .shorthand property.
         For the specific parameters, see the respective transport's .fromstring
         method.
+        
+        The base class implementation searches among all known subclasses
+        for the Transport matching the given shorthand, and returns
+        ``Subclass.fromstring(expression)``.
         '''
         shorthand, _, expr = expression.partition(':')
         for subclass in subclasses(cls):
@@ -89,24 +96,41 @@ class Transport(object):
         raise ValueError('Could not find a transport class with shorthand %s'%shorthand)
 
     def open(self):
-        '''open the communication channel. Override me if required.
+        '''Open the communication channel. e.g. bind and activate a socket.
         
-        When open() exits, the communication line should be ready for send and receive.
+        Override me.
+        
+        ``open`` is called on the new thread opened by `start`. I.e. the same thread in
+        which the Transport will ``run``.
+        
+        When ``open()`` returns, the communication channel should be ready for send and receive.
         '''
         
     def run(self):
-        '''Runs the transport, possibly blocking. Override me.'''
+        '''Runs the transport, blocking.
+        
+        Override me.
+        
+        This contains the transport's mainloop, which must:
+        
+         - receive bytes from the channel (usually blocking)
+         - pass the bytes to ``self.received``
+         - check periodically (e.g. each second) if ``self.running`` has been cleared
+         - if so, close the channel and return.
+        '''
         self.running = True
         
     
     def start(self, block=True):
         '''Run in a new thread.
         
-        If block is True, waits until startup is complete, then returns True.
-        Otherwise, returns a promise.
+        If ``block`` is True, waits until startup is complete i.e. :meth:`open` 
+        returns. Then returns True.
+        
+        if nonblocking, returns a promise.
         
         If something goes wrong during start, the Exception, like e.g. a 
-        socket.error, is passed through.
+        ``socket.error``, is passed through to the caller.
         '''
         p = Promise()
         
@@ -127,7 +151,13 @@ class Transport(object):
     
     
     def stop(self, block=True):
-        '''Stop running transport (possibly from another thread).'''
+        '''Stop running transport (possibly from another thread).
+        
+        Resets :attr:`running` to signal to :meth:`run` that it should stop.
+        
+        Actual stopping can take a moment. If ``block`` is True, :meth:`.stop` 
+        waits until :meth:`run` returns.
+        '''
         with self._transition_lock:
             self.running = False
             thread = None
@@ -142,22 +172,32 @@ class Transport(object):
                     self._thread.join()
     
     def set_on_received(self, on_received):
-        '''sets the function to call upon receiving data.'''
+        '''Sets the function to call upon receiving data.
+    
+        The callback's signature is ``on_received(sender, data)``, where ``sender`` is a
+        string describing the origin; ``data`` is the received bytes.
+        If decoding leaves trailing bytes, they should be returned. The Transport 
+        stores them and prepends them to the next received bytes.
+        '''
         self._on_received = on_received
         
     def send(self, data, receivers=None):
-        '''sends the given data to the specified receiver(s).
+        '''Sends the given data to the specified receiver(s).
         
-        receivers=None means send to all.
+        ``receivers`` is an iterable yielding strings. ``receivers=None`` sends 
+        the data to all connected peers.
+        
+        TODO: specify behaviour when sending on a stopped or failed Transport.
         '''
         raise NotImplementedError("Override me")
     
     def received(self, sender, data):
-        '''to be called when the subclass received data.
-        For multichannel transports, sender is a unique id identifying the source.
+        '''To be called by :meth:`run` when the subclass received data.
+        
+        ``sender`` is a unique string identifying the source. e.g. IP address and port.
         
         If the given data has an undecodable "tail", it is returned.
-        In this case you should prepend the tail to the next received bytes from this channel,
+        In this case :meth:`run` must prepend the tail to the next received bytes from this channel,
         because it is probably an incomplete message.
         '''
         if not self._on_received:
@@ -342,6 +382,7 @@ class RestartingTransport(Transport):
     '''A transport that wraps another transport and keeps restarting it.
 
     E.g. you can wrap a TcpClientTransport to try reconnecting it.
+    
     >>> tr = RestartingTransport(TcpClientTransport(*address), check_interval=10)
 
     check_interval gives the Restart interval in seconds. It may not be kept exactly.
