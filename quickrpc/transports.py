@@ -385,7 +385,7 @@ class RestartingTransport(Transport):
             
         
     def open(self):
-        sel._try_start()
+        self._try_start()
 
     def run(self):
         self.running = True
