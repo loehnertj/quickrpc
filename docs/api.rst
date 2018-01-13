@@ -7,4 +7,5 @@ API documentation
     remote_api
     transports
     codecs
+    promise
     other

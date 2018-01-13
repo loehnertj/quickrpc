@@ -24,9 +24,11 @@ Important:
     The method body of remote methods must be empty.
 
 This is because by caling ``@outgoing`` methods, you actually issue a call
-over the :class:`Transport` that is bound to the ``RemoteAPI`` at runtime.
-Since the API is meant to be used by both sides (by means of inverting it),
-``@incoming`` methods should be empty, too.
+over the :class:`~.transports.Transport` that is bound to the 
+``RemoteAPI`` at runtime. Since the API is meant to be used by both sides (by 
+means of inverting it), ``@incoming`` methods should be empty, too. The side 
+effect of this is that the class definition is more or less a printable 
+specification of your interface.
 
 ``@incoming`` methods have a ``.connect()`` method to attach an implementation
 to that message. The connected handler has the same signature as the
@@ -35,11 +37,13 @@ to that message. The connected handler has the same signature as the
 By default, all defined calls are resultless (i.e. notifications). To define
 calls with return value, decorate with ``has_reply=True`` kwarg.
 
-When handling such a call on the "incoming" side, your handler's return value
+When handling such a call on the incoming side, your handler's return value
 is returned to the sender. Exceptions are caught and sent as error reply.
 
-On the ``outgoing`` side, the call immediately returns a :class:`Promise` object.
-You then use ``.result()`` to get at the actual result. This will block
+On the ``outgoing`` side, the call immediately returns a 
+:class:`~.Promise` object.
+You then use :meth:`~.Promise.result` to get at the actual 
+result. This will block
 until the result arrived.
 
 (TODO: make blocking call by default, add block=False param for Promises)
@@ -64,25 +68,22 @@ __all__ = [
 class RemoteAPI(object):
     '''Describes an API i.e. a set of allowed outgoing and incoming calls.
     
-    .codec holds the Codec for (de)serializing data.
-    .transport holds the underlying transport.
+    Subclass and add your calls.
+    
+    :attr:`.codec` holds the Codec for (de)serializing data.
+    :attr:`.transport` holds the underlying transport.
 
-    Both can also be strings, then Transport.fromstring / Codec.fromstring are used
+    Both can also be strings, then :meth:`.Transport.fromstring` / :meth:`.Codec.fromstring` are used
     to acquire the respective objects. In this case, transport still needs to be started
-    via api.transport.start().
+    via ``myapi.transport.start()``.
     
-    .message_error(exception, in_reply_to) is called each time a message cannot be decoded
-    or handled properly.
-    By default, it logs the error as warning.
-    in_reply_to is the message that triggered the error, None if decoding failed.
-    
-    Methods marked as @outgoing are automatically turned into
-    messages on call. The method body is executed before sending. (use e.g.
+    Methods marked as ``@outgoing`` are automatically turned into
+    messages when called. The method body is executed before sending. (use e.g.
     for validation of outgoing data).
     They must accept a special `receivers` argument, which is passed to the
     Transport.
     
-    Methods marked as @incoming are called by the transport when
+    Methods marked as ``@incoming`` are called by the transport when
     messages arrive. They work like signals - you can connect your
     own handler(s) to them. Connected handlers must have the same
     signature as the incoming call. All @incoming methods MUST support
@@ -98,6 +99,9 @@ class RemoteAPI(object):
     Execution order: the method of remote_api is executed first,
     then the connected handlers in the order of registering.
     
+    Incoming messages with unknown method will not be processed. If the message
+    has ``.id != 0``, it will automatically be replied with an error.
+    
     Threading:
     
         * outgoing messages are sent on the calling thread.
@@ -105,8 +109,9 @@ class RemoteAPI(object):
           handles Transport receive events. I.e. the
           Transport implementation defines the behaviour.
             
-    For added neatness, you can .invert() the whole api,
-    swapping incoming and outgoing methods.
+    Lastly, you can :meth:`.invert` the whole api,
+    swapping incoming and outgoing methods. When inverted, the ``sender`` and 
+    ``receiver`` arguments of each method swap their roles.
     
     '''
     def __init__(self, codec='jrpc', transport=None, invert=False):
@@ -126,7 +131,7 @@ class RemoteAPI(object):
         
     @property
     def transport(self):
-        '''gets/sets the transport used to send and receive messages.
+        '''Gets/sets the transport used to send and receive messages.
         
         You can change the transport at runtime.'''
         return self._transport
@@ -134,11 +139,11 @@ class RemoteAPI(object):
     def transport(self, value):
         self._transport = value
         if self._transport:
-            self._transport.set_on_received(self.handle_received)
+            self._transport.set_on_received(self._handle_received)
             
     def invert(self):
-        '''Swaps @incoming and @outgoing property
-        on all methods if this INSTANCE.
+        '''Swaps ``@incoming`` and ``@outgoing`` decoration
+        on all methods of this INSTANCE.
         
         I.e. generates the opposite-side API.
         
@@ -156,7 +161,7 @@ class RemoteAPI(object):
 
     # ---- handling of incoming messages ----
 
-    def handle_received(self, sender, data):
+    def _handle_received(self, sender, data):
         '''called by the Transport when data comes in.'''
         messages, remainder = self.codec.decode(data)
         for message in messages:
@@ -191,7 +196,12 @@ class RemoteAPI(object):
                 self.transport.send(data)
 
     def message_error(self, exception, in_reply_to=None):
-        '''you can use this to send an error response'''
+        '''Called each time that an incoming message causes problems.
+        
+        By default, it logs the error as warning. in_reply_to is the message that 
+        triggered the error, None if decoding failed. If the requested method can be 
+        identified and has a reply, an error reply is returned to the sender.
+        '''
         L().warning(exception)
         if in_reply_to.id:
             data = self.codec.encode_error(in_reply_to, exception, errorcode=0)
@@ -224,7 +234,8 @@ class RemoteAPI(object):
     def unhandled_calls(self):
         '''Generator, returns the names of all *incoming*, unconnected methods.
 
-        If no results are returned, all incoming messages are connected.
+        If no results are returned, all incoming messages are connected. Use 
+        this to check for missed ``.connect`` calls.
         '''
         result = []
         for attr in dir(self):
@@ -234,6 +245,32 @@ class RemoteAPI(object):
 
 
 def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
+    '''Marks a method as possible incoming message.
+    
+    ``@incoming(has_reply=False, allow_position_args=False)``
+    
+    Incoming methods keep list of connected listeners, which are called with the 
+    signature of the incoming method (excluding ``self``). The first argument
+    will be passed positional and is a string describing the sender of the message.
+    The remaining arguments can be chosen freely and will usually be passed as named
+    args.
+    
+    Listeners can be added with ``myapi.<method>.connect(handler)`` and 
+    disconnected with ``.disconnect(handler)``. They are called in the order that 
+    they were added.
+    
+    If ``has_reply=True``, the handler should return a value that is sent back 
+    to the sender. If multiple handlers are connected, at most one of them must 
+    return something.
+    
+    If ``allow_positional_args=True``, messages with positional (unnamed) 
+    arguments are accepted. Otherwise such arguments throw an error message without 
+    executing the handler(s). Note that the :class:`.Codec` must support positional 
+    and/or mixed args as well. It is strongly recommended to use named args only.
+    
+    Lastly, the incoming method has a ``myapi.<method>.inverted()`` method, which
+    will return the ``@outgoing`` variant of it.
+    '''
     if not unbound_method:
         # when called as @decorator(...)
         return lambda unbound_method: incoming(unbound_method=unbound_method, has_reply=has_reply, allow_positional_args=allow_positional_args)
@@ -276,8 +313,32 @@ def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
 
 
 def outgoing(unbound_method=None, has_reply=False, allow_positional_args=False):
-    '''generates a dispatcher call under name of the method.
-    method's body will be called before sending.
+    '''Marks a method as possible outgoing message.
+    
+    ``@outgoing(has_reply=False, allow_position_args=False)``
+    
+    Invocation of outgoing methods leads to a message being sent over the 
+    :class:`.Transport` of the :class:`RemoteAPI`.
+    
+    The first argument must be the list of receivers of the message, as a list 
+    of strings. When calling the method, usually you will use the sender name(s) 
+    received via an incoming call.  Set receivers=None to send to all connected 
+    peers.
+    
+    The remaining arguments can be choosen freely. The argument values can be 
+    anything supported by the :class:`.Codec` that you use. The builtin Codecs 
+    support all the "atomic" builtin types, as well as dicts and lists.
+    
+    If ``has_reply=True``, the other side is expected to return a result value. In this case,
+    calling the outgoing method returns a :class:`.Promise` immediately.
+    
+    If ``allow_positional_args=True``, calls with positional (unnamed) 
+    arguments are accepted. Otherwise such arguments raise :class:`ValueError`.
+    **For sending, they will be converted into named arguments.**
+    It is strongly recommended to use named args only.
+    
+    Lastly, the outgoing method has a ``myapi.<method>.inverted()`` method, which
+    will return the ``@incoming`` variant of it.
     '''
     if not unbound_method:
         # when called as @decorator(...)

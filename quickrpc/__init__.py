@@ -17,8 +17,8 @@ transport.
 
 Codecs and Transports can be instantiated from a textual definition, so that
 they can easily put in a config file or on the commandline. See
-:func:`transport` (alias of :func:`transports.Transport.fromstring`) and 
-:func:`codec` (alias of :func:`codecs.Codec.fromstring`).
+:meth:`~quickrpc.transport` (alias of :func:`transports.Transport.fromstring`) and 
+:meth:`~quickrpc.codec` (alias of :func:`codecs.Codec.fromstring`).
 '''
 
 from . import transports
@@ -37,5 +37,11 @@ __all__ = [
         ]
 
 
-transport = transports.Transport.fromstring
-codec = codecs.Codec.fromstring
+def transport(expression):
+    return transports.Transport.fromstring(expression)
+
+def codec(expression):
+    return codecs.Codec.fromstring(expression)
+
+transport.__doc__ = transports.Transport.fromstring.__doc__
+codec.__doc__ = codecs.Codec.fromstring.__doc__
