@@ -24,7 +24,7 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
             return MagicMock()
 
-MOCK_MODULES = ['PyQt4',]
+MOCK_MODULES = ['PyQt4', 'QtCore', 'QtNetwork']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 
