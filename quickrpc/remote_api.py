@@ -244,6 +244,8 @@ class RemoteAPI(object):
                 yield attr
 
 
+# TODO: keep signature of wrapped methods
+
 def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
     '''Marks a method as possible incoming message.
     
