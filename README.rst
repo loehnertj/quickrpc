@@ -1,5 +1,5 @@
 QuickRPC for Python: Small, interoperable, automagic RPC library.
------
+=================================================================
 
 QuickRPC is a library that is designed for quick and painless setup of communication channels and Remote-call protocols.
 
@@ -39,10 +39,26 @@ That's it! You could now connect to the server e.g. via telnet::
     
 (Exit via Ctrl+5 -> "quit")
     
+INSTALLATION
+------------
+
+Requirements: Basically none, except for Python >= 3. For the ``QtTransports``, PyQt4 is required.
+
+Then::
+
+    pip install https://github.com/loehnertj/quickrpc/archive/master.zip
+    
+Or, download / clone and use ``python setup.py install``.
+    
+    
+DOCUMENTATION
+-------------
+
+Please proceed to http://quickrpc.readthedocs.io/en/latest/index.html
     
 TODO
 ----
 
 This is a hobby project. If you need something quick, contact me or better, send a pull request. :-)
 
-That said, proper documentation is #1 on the priority list. For now, use the source.
+That said, proper documentation is #1 on the priority list. 
