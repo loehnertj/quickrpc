@@ -7,8 +7,12 @@ Classes defined here:
  * Transport: abstract base
  * StdioTransport: reads from stdin, writes to stdout.
  * MuxTransport: a transport that multiplexes several sub-transports.
+ * RestartingTransport: a transport that automatically restarts its child.
+ * RestartingTcpClientTransport: convenience class
  * TcpServerTransport: a transport that accepts tcp connections and muxes 
     them into one transport. Actually a forward to quickrpc.network_transports.
+ * TcpClientTransport: connects to a TCP server. This is a forward to 
+    quickrpc.network_transports.
 
 '''
 
