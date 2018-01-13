@@ -38,7 +38,7 @@ from .promise import Promise, PromiseDoneError
 
 L = lambda: logging.getLogger(__name__)
 
-class TransportException(Exception):
+class TransportError(Exception):
     '''generic error in a transport'''
 
 
@@ -313,7 +313,7 @@ class MuxTransport(Transport):
             L().error('Some transports failed to start. Aborting.')
             for transport in running:
                 transport.stop()
-            e = TransportException()
+            e = TransportError()
             e.exceptions = exceptions
             raise e
         
