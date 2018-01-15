@@ -408,6 +408,7 @@ class RestartingTransport(Transport):
                 )
 
     def __init__(self, transport, check_interval=10, name=''):
+        Transport.__init__(self)
         self.check_interval = check_interval
         self.transport = transport
         self.transport.set_on_received(self.received)
