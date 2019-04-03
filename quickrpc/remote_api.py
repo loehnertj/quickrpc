@@ -215,8 +215,11 @@ class RemoteAPI(object):
                     L().error('Exception in message handler caught: '+str(e), exc_info = True)
             else:
                 if has_reply:
-                    data = self.codec.encode_reply(message, result)
-                    self.transport.send(data, receivers=[sender])
+                    try:
+                        data = self.codec.encode_reply(message, result)
+                        self.transport.send(data, receivers=[sender])
+                    except Exception as e:
+                        L().error('Exception in message handler while sending response: '+str(e), exc_info=True)
         if self._action_queue:
             # message processed in extra thread, we return instantly after .put
             self._action_queue.put(action)
