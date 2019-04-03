@@ -423,6 +423,7 @@ class RestartingTransport(Transport):
         self.transport.set_on_received(self.received)
         self._poll_interval = 1
         self.name = name
+        self._start_promise = None
 
     @property
     def receiver_thread(self):
@@ -433,26 +434,31 @@ class RestartingTransport(Transport):
         # First stop self!
         Transport.stop(self)
         
-    def _try_start(self):
-        try:
-            self.transport.start()
-        except Exception as e:
-            L().info('RestartingTransport: inner transport could not be started.')
-            
-        
     def open(self):
-        self._try_start()
+        self._start_promise = self.transport.start(block=False)
 
     def run(self):
         self.running = True
         restart_timer = self.check_interval
         while self.running:
             time.sleep(self._poll_interval)
-            if not self.transport.running:
+            if self._start_promise:
+                # still starting, wait for result
+                try:
+                    self._start_promise.result(timeout=1.0)
+                except TimeoutError:
+                    pass
+                except Exception as e:
+                    L().info('Start of (%s) failed. Traceback follows. Retry in %g seconds'%(self.transport.name, self.check_interval), exc_info=True)
+                    self._start_promise = None
+                else:
+                    # started
+                    self._start_promise = None
+            elif not self.transport.running:
                 restart_timer -= self._poll_interval
                 if restart_timer <= 0:
                     L().info("trying to restart (%s)"%self.name)
-                    self._try_start()
+                    self._start_promise = self.transport.start(block=False)
                     restart_timer = self.check_interval
         self.transport.stop()
 
