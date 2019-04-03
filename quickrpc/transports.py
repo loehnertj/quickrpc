@@ -429,6 +429,11 @@ class RestartingTransport(Transport):
     def receiver_thread(self):
         '''Thread on which receive() is called - in this case, receiver_thread of the child.'''
         return self.transport.receiver_thread
+    
+    @property
+    def subtransport_running(self):
+        '''True if the child transport is currently running.'''
+        return self.transport.running
 
     def stop(self):
         # First stop self!
