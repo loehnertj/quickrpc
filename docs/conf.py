@@ -301,3 +301,13 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #texinfo_no_detailmenu = False
+
+def warn_undocumented_members(app, what, name, obj, options, lines):
+    if len(lines)==0:
+        # warn to terminal during build
+        print "Warning: ", what, "is undocumented: ", name, "(%d)"% len(lines);
+        # or modify the docstring so the rendered output is highlights the omission
+        lines.append("**%s '%s' undocumented**" % (what, name));
+
+def setup(app):
+    app.connect('autodoc-process-docstring', warn_undocumented_members)
