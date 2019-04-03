@@ -207,9 +207,12 @@ class RemoteAPI(object):
             try:
                 result = method(sender, message)
             except Exception as e:
-                L().error(str(e), exc_info = True)
                 if has_reply: 
+                    L().debug('Exception in message handler, returning as result: '+str(e), exc_info=True)
                     self.message_error(sender, e, message)
+                else:
+                    # Complain and continue, since the user cannot install sensible handling above from here.
+                    L().error('Exception in message handler caught: '+str(e), exc_info = True)
             else:
                 if has_reply:
                     data = self.codec.encode_reply(message, result)
