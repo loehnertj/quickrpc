@@ -410,9 +410,13 @@ class RestartingTransport(Transport):
         '''
         _, _, expr = expression.partition(':')
         interval, _, expr = expr.partition(':')
+        if interval:
+            interval = int(interval)
+        else:
+            interval=10
         return cls(
                 transport=Transport.fromstring(expr),
-                check_interval=10,
+                check_interval=interval,
                 name=expression
                 )
 
