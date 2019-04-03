@@ -75,6 +75,7 @@ class Transport(object):
         # This lock guards calls to .start() and .stop().
         # E.g. someone might try to stop while we are still starting.
         self._transition_lock = threading.Lock()
+        self._thread = None
         
     @classmethod
     def fromstring(cls, expression):
@@ -94,6 +95,11 @@ class Transport(object):
             if subclass.shorthand == shorthand:
                 return subclass.fromstring(expression)
         raise ValueError('Could not find a transport class with shorthand %s'%shorthand)
+
+    @property
+    def receiver_thread(self):
+        '''The thread on which on_received will be called.'''
+        return self._thread
 
     def open(self):
         '''Open the communication channel. e.g. bind and activate a socket.
@@ -121,7 +127,7 @@ class Transport(object):
         self.running = True
         
     
-    def start(self, block=True):
+    def start(self, block=True, timeout=10):
         '''Run in a new thread.
         
         If ``block`` is True, waits until startup is complete i.e. :meth:`open` 
@@ -132,7 +138,6 @@ class Transport(object):
         If something goes wrong during start, the Exception, like e.g. a 
         ``socket.error``, is passed through to the caller.
         '''
-        p = Promise()
         
         def starter():
             with self._transition_lock:
@@ -143,11 +148,16 @@ class Transport(object):
                     return
                 else:
                     p.set_result(True)
-            self.run()
-                
+            try:
+                self.run()
+            finally:
+                self.running = False
+
         self._thread = threading.Thread(target=starter, name=self.__class__.__name__)
+        p = Promise(setter_thread=self._thread)
+
         self._thread.start()
-        return p.result() if block else p
+        return p.result(timeout=timeout) if block else p
     
     
     def stop(self, block=True):
@@ -160,16 +170,15 @@ class Transport(object):
         '''
         with self._transition_lock:
             self.running = False
-            thread = None
-            try:
-                thread = self._thread
-            except AttributeError:
-                # run() might have been called explicitly.
-                pass
-            else:
-                # If cross-thread stop, wait until actually stopped.
-                if block and thread is not threading.current_thread():
+            thread = self._thread
+            # If cross-thread stop, wait until actually stopped.
+            # conditions:
+            # - block is set
+            # - thread is not None
+            # - thread is not the current_thread() (catches "stop-from-within" deadlock)
+            if block and thread and thread is not threading.current_thread():
                     self._thread.join()
+            self._thread = None
     
     def set_on_received(self, on_received):
         '''Sets the function to call upon receiving data.
@@ -414,6 +423,11 @@ class RestartingTransport(Transport):
         self.transport.set_on_received(self.received)
         self._poll_interval = 1
         self.name = name
+
+    @property
+    def receiver_thread(self):
+        '''Thread on which receive() is called - in this case, receiver_thread of the child.'''
+        return self.transport.receiver_thread
 
     def stop(self):
         # First stop self!
