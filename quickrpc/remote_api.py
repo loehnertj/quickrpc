@@ -54,6 +54,7 @@ from .promise import Promise
 from .action_queue import ActionQueue
 import itertools as it
 import inspect
+from functools import wraps
 from .codecs import Codec, Message, Reply, ErrorReply
 from .transports import Transport
 
@@ -320,6 +321,7 @@ def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
         # when called as @decorator(...)
         return lambda unbound_method: incoming(unbound_method=unbound_method, has_reply=has_reply, allow_positional_args=allow_positional_args)
     # when called as @decorator or explicitly
+    @wraps(unbound_method)
     def fn(self, sender, message):
         if isinstance(message.kwargs, dict):
             args, kwargs = [], message.kwargs
@@ -351,8 +353,6 @@ def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
     fn._unbound_method = unbound_method
     fn.connect = lambda listener: fn._listeners.append(listener)
     fn.disconnect = lambda listener: fn._listeners.remove(listener)
-    fn.__name__ = unbound_method.__name__
-    fn.__doc__ = unbound_method.__doc__
     fn.inverted = lambda: outgoing(unbound_method, has_reply=has_reply, allow_positional_args=allow_positional_args)
     return fn
 
@@ -395,6 +395,7 @@ def outgoing(unbound_method=None, has_reply=False, allow_positional_args=False):
         argnames = [p.name for p in sig.parameters.values()][2:]
     else:
         argnames = []
+    @wraps(unbound_method)
     def fn(self, receivers=None, *args, **kwargs):
         if args and not allow_positional_args:
             raise ValueError('Please call with named parameters only!')
@@ -416,7 +417,5 @@ def outgoing(unbound_method=None, has_reply=False, allow_positional_args=False):
             return promise
 
     fn._remote_api_outgoing = {'has_reply': has_reply}
-    fn.__name__ = unbound_method.__name__
-    fn.__doc__ = unbound_method.__doc__
     fn.inverted = lambda: incoming(unbound_method, has_reply=has_reply, allow_positional_args=allow_positional_args)
     return fn
