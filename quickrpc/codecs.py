@@ -47,12 +47,12 @@ class Message(object):
 class Reply(object):
     def __init__(self, result, id):
         self.result = result
-        self.id = id
+        self.id = int(id)
 
 class ErrorReply(object):
     def __init__(self, exception, id, errorcode=0):
         self.exception = exception
-        self.id = id
+        self.id = int(id)
         self.errorcode = errorcode
 
 
