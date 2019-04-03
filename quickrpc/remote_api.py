@@ -214,6 +214,7 @@ class RemoteAPI(object):
         except KeyError:
             # do not raise, since it cannot be caught by user.
             L().warning('Received reply that was never requested: %r'%(reply,))
+            return
 
         if isinstance(reply, Reply):
             promise.set_result(reply.result)
