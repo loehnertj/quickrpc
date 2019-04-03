@@ -467,11 +467,8 @@ class RestartingTransport(Transport):
                     restart_timer = self.check_interval
         self.transport.stop()
 
-    def send(self, data, receivers):
-        if self.transport.running:
-            self.transport.send(data, receivers)
-        else:
-            raise IOError('Transport %s is not running, cannot send message'%(self.name,))
+    def send(self, data, receivers=None):
+        self.transport.send(data, receivers)
 
 def RestartingTcpClientTransport(host, port, check_interval=10):
     '''Convenience wrapper for the most common use case. Returns TcpClientTransport wrapped in a RestartingTransport.'''
