@@ -33,7 +33,8 @@ __all__ = [
         'incoming',
         'outgoing',
         'transport',
-        'codec'
+        'codec',
+        'RemoteError'
         ]
 
 
@@ -45,3 +46,5 @@ def codec(expression):
 
 transport.__doc__ = transports.Transport.fromstring.__doc__
 codec.__doc__ = codecs.Codec.fromstring.__doc__
+
+RemoteError = codecs.RemoteError
