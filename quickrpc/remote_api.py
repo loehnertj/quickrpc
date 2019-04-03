@@ -219,7 +219,7 @@ class RemoteAPI(object):
             promise.set_result(reply.result)
         else:
             # Put the ErrorReply in the result queue.
-            promise.set_exception(reply)
+            promise.set_exception(reply.exception)
 
     # ---- handling of outgoing messages ----
 
