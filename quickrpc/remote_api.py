@@ -226,7 +226,7 @@ class RemoteAPI(object):
 
     def _new_request(self):
         call_id = next(self._id_dispenser)
-        promise = Promise()
+        promise = Promise(setter_thread=self.transport.receiver_thread)
         self._pending_replies[call_id] = promise
         return call_id, promise
 
