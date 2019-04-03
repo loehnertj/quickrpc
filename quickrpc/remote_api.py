@@ -51,6 +51,7 @@ until the result arrived.
 '''
 import logging
 from .promise import Promise
+from .action_queue import ActionQueue
 import itertools as it
 import inspect
 from .codecs import Codec, Message, Reply, ErrorReply
@@ -105,16 +106,28 @@ class RemoteAPI(object):
     Threading:
     
         * outgoing messages are sent on the calling thread.
-        * incoming messages are handled on the thread which
-          handles Transport receive events. I.e. the
-          Transport implementation defines the behaviour.
-            
-    Lastly, you can :meth:`.invert` the whole api,
+        * If async_processing = False, incoming messages are handled on the thread
+          which handles Transport receive events. I.e. the Transport
+          implementation defines the behaviour.
+        * If async_processing = True, an extra Thread is used to handle messages.
+
+    The latter allows the receive handler to run concurrently to message
+    handling, allowing further requests to be sent out and to await the result.
+    However it means one extra thread. In any case, only one incoming message
+    is handled at a time.
+    
+    Recommendation is to set ``async_processing=True`` if there are any outgoing
+    calls that have a reply, ``False`` if not.
+
+    Inverting:
+
+    You can :meth:`.invert` the whole api,
     swapping incoming and outgoing methods. When inverted, the ``sender`` and 
-    ``receiver`` arguments of each method swap their roles.
+    ``receiver`` arguments of each method swap their roles. This is also possible
+    upon initialization by giving ``invert=True`` kwarg.
     
     '''
-    def __init__(self, codec='jrpc', transport=None, invert=False):
+    def __init__(self, codec='jrpc', transport=None, invert=False, async_processing=False):
         if isinstance(codec, str):
             codec = Codec.fromstring(codec)
         if isinstance(transport, str):
@@ -128,6 +141,11 @@ class RemoteAPI(object):
         next(self._id_dispenser)
         if invert:
             self.invert()
+        # just use the presence of _action_queue as flag.
+        if async_processing:
+            self._action_queue = ActionQueue()
+        else:
+            self._action_queue = None
         
     @property
     def transport(self):
@@ -183,17 +201,25 @@ class RemoteAPI(object):
         if not hasattr(method, "_remote_api_incoming"):
             self.message_error(AttributeError("Incoming call of %s not marked as @incoming on the api"%message.method), message)
             return
-        has_reply = method._remote_api_incoming['has_reply']
-        try:
-            result = method(sender, message)
-        except Exception as e:
-            L().error(str(e), exc_info = True)
-            if has_reply: 
-                self.message_error(e, message)
+
+        def action():
+            has_reply = method._remote_api_incoming['has_reply']
+            try:
+                result = method(sender, message)
+            except Exception as e:
+                L().error(str(e), exc_info = True)
+                if has_reply: 
+                    self.message_error(sender, e, message)
+            else:
+                if has_reply:
+                    data = self.codec.encode_reply(message, result)
+                    self.transport.send(data, receivers=[sender])
+        if self._action_queue:
+            # message processed in extra thread, we return instantly after .put
+            self._action_queue.put(action)
         else:
-            if has_reply:
-                data = self.codec.encode_reply(message, result)
-                self.transport.send(data)
+            # message processed in this thread, return when done.
+            action()
 
     def message_error(self, exception, in_reply_to=None):
         '''Called each time that an incoming message causes problems.
@@ -265,6 +291,16 @@ def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
     If ``has_reply=True``, the handler should return a value that is sent back 
     to the sender. If multiple handlers are connected, at most one of them must 
     return something.
+
+    Notice:
+        Processing of incoming messages does not resume until all listeners returned.
+        This means that if you issue a followup remote call in a listener, the
+        result can not arrive while the listener is executing. If you want to
+        do this, use promise.then() to resume when the result is there.
+        
+        You can also spawn a new thread in your listener, to do the processing.
+        However, be aware that this makes you vulnerable against DOS attacks,
+        since an attacker can make you open arbitrary many threads this way.
     
     If ``allow_positional_args=True``, messages with positional (unnamed) 
     arguments are accepted. Otherwise such arguments throw an error message without 
