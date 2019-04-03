@@ -184,7 +184,7 @@ class RemoteAPI(object):
         messages, remainder = self.codec.decode(data)
         for message in messages:
             if isinstance(message, Exception):
-                self.message_error(message)
+                self.message_error(sender, message)
                 continue
             elif isinstance(message, Reply) or isinstance(message, ErrorReply):
                 self._deliver_reply(message)
@@ -196,10 +196,10 @@ class RemoteAPI(object):
         try:
             method = getattr(self, message.method)
         except AttributeError:
-            self.message_error(AttributeError("Incoming call of %s not defined on the api"%message.method), message)
+            self.message_error(sender, AttributeError("Incoming call of %s not defined on the api"%message.method), message)
             return
         if not hasattr(method, "_remote_api_incoming"):
-            self.message_error(AttributeError("Incoming call of %s not marked as @incoming on the api"%message.method), message)
+            self.message_error(sender, AttributeError("Incoming call of %s not marked as @incoming on the api"%message.method), message)
             return
 
         def action():
@@ -221,7 +221,7 @@ class RemoteAPI(object):
             # message processed in this thread, return when done.
             action()
 
-    def message_error(self, exception, in_reply_to=None):
+    def message_error(self, sender, exception, in_reply_to=None):
         '''Called each time that an incoming message causes problems.
         
         By default, it logs the error as warning. in_reply_to is the message that 
@@ -231,7 +231,7 @@ class RemoteAPI(object):
         L().warning(exception)
         if in_reply_to.id:
             data = self.codec.encode_error(in_reply_to, exception, errorcode=0)
-            self.transport.send(data)
+            self.transport.send(data, receivers=[sender])
 
     def _deliver_reply(self, reply):
         id = reply.id
