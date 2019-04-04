@@ -9,8 +9,6 @@ from .transports import Transport, MuxTransport
 
 L = lambda: logging.getLogger(__name__)
 
-# FIXME graceful handling of disconnects
-
 class UdpTransport(Transport):
     '''transport that communicates over UDP datagrams.
     
@@ -91,10 +89,10 @@ class TcpClientTransport(Transport):
         self.buffersize = buffersize
 
     def send(self, data, receivers=None):
-        if not self.running:
-            raise IOError('Tried to send over non-running transport!')
         if receivers is not None and not self.name in receivers:
             return
+        if not self.running:
+            raise IOError('Tried to send over non-running transport!')
         self._keepalive_countdown = self.keepalive_interval
         L().debug('TcpClientTransport .send to %s: %r'%(self.name, data))
         # FIXME: do something on failure
@@ -122,6 +120,8 @@ class TcpClientTransport(Transport):
             except sk.timeout:
                 self._keepalive_tick()
                 continue
+            except ConnectionError:
+                data = b''
             self._keepalive_countdown = self.keepalive_interval
             if data == b'':
                 # Connection was closed.
@@ -250,7 +250,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
         for .start() to be called.
         '''
         self.name = '%s:%s'%self.client_address
-        L().debug('TCP connect from %s'%self.name)
+        L().info('TCP connect from %s'%self.name)
         
         self.request.settimeout(0.5)
         self.transport_running = Event()
@@ -266,7 +266,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
             except sk.timeout:
                 self._keepalive_tick()
                 continue
-            except ConnectionResetError:
+            except ConnectionError:
                 data = b''
             self._keepalive_countdown = self.keepalive_interval
             #data = data.replace(b'\r\n', b'\n')
@@ -295,12 +295,13 @@ class _TcpConnection(BaseRequestHandler, Transport):
         self.transport_running.clear()
         
     def send(self, data, receivers=None):
-        if not self.transport_running.is_set():
-            raise IOError('Tried to send over non-running transport!')
         if receivers is not None and not self.name in receivers:
             return
+        if not self.transport_running.is_set():
+            raise IOError('Tried to send over non-running transport!')
         self._keepalive_countdown = self.keepalive_interval
         # FIXME: do something on failure
+        L().debug('_TcpConnection .send to %s: %r'%(self.name, data))
         try:
             self.request.sendall(data)
         except Exception:
