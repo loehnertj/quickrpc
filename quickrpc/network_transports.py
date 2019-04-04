@@ -3,6 +3,7 @@ __all__ = ['UdpTransport', 'TcpServerTransport', 'TcpClientTransport']
 import logging
 
 import socket as sk
+from select import select
 from socketserver import ThreadingTCPServer, BaseRequestHandler
 from threading import Thread, Event
 from .transports import Transport, MuxTransport
@@ -107,7 +108,6 @@ class TcpClientTransport(Transport):
             raise
         L().info('Connected to %s'%(self.name,))
         # Sets the timeout for .read and .write
-        self.socket.settimeout(0.5)
         self._keepalive_countdown = self.keepalive_interval
 
     def run(self):
@@ -115,11 +115,12 @@ class TcpClientTransport(Transport):
         self.running = True
         leftover = b''
         while self.running:
-            try:
-                data = self.socket.recv(self.buffersize)
-            except sk.timeout:
+            readable, _, _ = select([self.socket], [], [], 0.5)
+            if not readable:
                 self._keepalive_tick()
                 continue
+            try:
+                data = self.socket.recv(self.buffersize)
             except ConnectionError:
                 data = b''
             self._keepalive_countdown = self.keepalive_interval
@@ -252,7 +253,6 @@ class _TcpConnection(BaseRequestHandler, Transport):
         self.name = '%s:%s'%self.client_address
         L().info('TCP connect from %s'%self.name)
         
-        self.request.settimeout(0.5)
         self.transport_running = Event()
         # add myself to the muxer, which will .start() me.
         self.server.mux.add_transport(self)
@@ -261,11 +261,12 @@ class _TcpConnection(BaseRequestHandler, Transport):
         self.transport_running.wait()
         leftover = b''
         while self.transport_running.is_set():
-            try:
-                data = self.request.recv(self.buffersize)
-            except sk.timeout:
+            readable, _, _ = select([self.request], [],[], 0.5)
+            if not readable:
                 self._keepalive_tick()
                 continue
+            try:
+                data = self.request.recv(self.buffersize)
             except ConnectionError:
                 data = b''
             self._keepalive_countdown = self.keepalive_interval
