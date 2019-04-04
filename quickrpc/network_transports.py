@@ -12,10 +12,10 @@ L = lambda: logging.getLogger(__name__)
 
 class UdpTransport(Transport):
     '''transport that communicates over UDP datagrams.
-    
-    Connectionless - sender/receiver are IP addresses. Sending and receiving is 
+
+    Connectionless - sender/receiver are IP addresses. Sending and receiving is
     done on the same port. Sending with receiver=None makes a broadcast.
-    
+
     Use messages > 500 Bytes at your own peril.
     '''
     shorthand = 'udp'
@@ -28,7 +28,7 @@ class UdpTransport(Transport):
     def __init__(self, port):
         Transport.__init__(self)
         self.port = port
-        
+
     def open(self):
         self.socket = sk.socket(sk.AF_INET, sk.SOCK_DGRAM)
         self.socket.settimeout(0.5)
@@ -41,7 +41,7 @@ class UdpTransport(Transport):
             # SO_REUSEPORT not available.
             pass
         self.socket.bind(('', self.port))
-        
+
     def run(self):
         self.running = True
         while self.running:
@@ -55,7 +55,7 @@ class UdpTransport(Transport):
             L().debug('message from udp %s: %s'%(host, data))
             self.received(data=data, sender=host)
         self.socket.close()
-    
+
     def send(self, data, receivers=None):
         L().debug('message to udp %r: %s'%(receivers, data))
         if receivers:
@@ -63,7 +63,7 @@ class UdpTransport(Transport):
                 self.socket.sendto(data, (receiver, self.port))
         else:
             self.socket.sendto(data, ('<broadcast>', self.port))
-        
+
 class TcpClientTransport(Transport):
     '''Transport that connects to a TCP server.
 
@@ -72,6 +72,8 @@ class TcpClientTransport(Transport):
     receiving resets the timer. You can change the attributes anytime.
     '''
     shorthand = 'tcp'
+
+    _CHECK_INTERVAL = 0.5
     @classmethod
     def fromstring(cls, expression):
         '''tcp:<host>:<port>'''
@@ -115,7 +117,7 @@ class TcpClientTransport(Transport):
         self.running = True
         leftover = b''
         while self.running:
-            readable, _, _ = select([self.socket], [], [], 0.5)
+            readable, _, _ = select([self.socket], [], [], self._CHECK_INTERVAL)
             if not readable:
                 self._keepalive_tick()
                 continue
@@ -140,7 +142,7 @@ class TcpClientTransport(Transport):
 
     def _keepalive_tick(self):
         if self.keepalive_msg:
-            self._keepalive_countdown -= self.socket.gettimeout()
+            self._keepalive_countdown -= self._CHECK_INTERVAL
             if self._keepalive_countdown <= 0:
                 L().debug('send keepalive')
                 self.socket.sendall(self.keepalive_msg)
@@ -149,16 +151,16 @@ class TcpClientTransport(Transport):
 
 class TcpServerTransport(MuxTransport):
     '''transport that accepts TCP connections as transports.
-    
+
     Basically a mux transport coupled with a TcpServer. Each time somebody
     connects, the connection is wrapped into a transport and added to the
     muxer.
-    
+
     There is (for now) no explicit notification about connects/disconnects;
     use the API for that.
-    
+
     Use .close() for server-side disconnect.
-    
+
     You can optionally pass an announcer (as returned by announcer_api.make_udp_announcer).
     It will be started/stopped together with the TcpServerTransport.
 
@@ -166,7 +168,7 @@ class TcpServerTransport(MuxTransport):
     ``keepalive_msg`` is sent verbatim every ``keepalive_interval`` seconds
     while the connection is idle. Any sending or receiving resets the timer.
     You can change the attributes directly while transport is stopped.
-    
+
     Threads:
      - TcpServerTransport.run() blocks (use .start() for automatic extra Thread)
      - .run() starts a new thread for listening to connections
@@ -176,7 +178,7 @@ class TcpServerTransport(MuxTransport):
     @classmethod
     def fromstring(cls, expression):
         '''tcpserv:<interface>:<port>
-        
+
         Leave <interface> empty to listen on all interfaces.
         '''
         _, iface, port = expression.split(':')
@@ -190,7 +192,7 @@ class TcpServerTransport(MuxTransport):
         self.keepalive_interval = keepalive_interval
         self.buffersize = buffersize
         MuxTransport.__init__(self)
-        
+
     def open(self):
         self.server = ThreadingTCPServer(self.addr, _TcpConnection, bind_and_activate=True)
         self.server.mux = self
@@ -200,15 +202,16 @@ class TcpServerTransport(MuxTransport):
                 self.announcer.transport.start()
             finally:
                 self.server.shutdown()
-        
+
     def run(self):
         MuxTransport.run(self)
-        
+
         if self.announcer:
             self.announcer.transport.stop()
-        
+
         self.server.shutdown()
-        
+        self.server.server_close()
+
     def close(self, name):
         '''close the connection with the given sender/receiver name.
         '''
@@ -219,16 +222,18 @@ class TcpServerTransport(MuxTransport):
 
 class _TcpConnection(BaseRequestHandler, Transport):
     '''Bridge between TcpServer (BaseRequestHandler) and Transport.
-    
+
     Implicitly created by the TcpServer. .handle() waits until
     Transport.start() is called, and closes the connection and
     exits upon call of .stop().
-    
+
     The Transport also stops upon client-side close of connection.
-    
+
     The _TcpConnection registers and unregisters itself with the TcpServerTransport.
     '''
-    
+
+    _CHECK_INTERVAL = 0.5
+
     # BaseRequestHandler overrides
     def __init__(self, request, client_address, server):
         # circumvent Transport.__init__, since none of the threading logic is used here
@@ -243,25 +248,26 @@ class _TcpConnection(BaseRequestHandler, Transport):
     @property
     def running(self):
         return self.transport_running.is_set()
-        
+
     def setup(self):
         '''called by the ThreadingTCPServer.
-        
+
         Adds the connection to the parent muxer, then waits
         for .start() to be called.
         '''
         self.name = '%s:%s'%self.client_address
         L().info('TCP connect from %s'%self.name)
-        
+
         self.transport_running = Event()
         # add myself to the muxer, which will .start() me.
         self.server.mux.add_transport(self)
-        
+
     def handle(self):
-        self.transport_running.wait()
+        # should be set almost-instantly; otherwise something is wrong.
+        self.transport_running.wait(timeout=1.0)
         leftover = b''
         while self.transport_running.is_set():
-            readable, _, _ = select([self.request], [],[], 0.5)
+            readable, _, _ = select([self.request], [],[], self._CHECK_INTERVAL)
             if not readable:
                 self._keepalive_tick()
                 continue
@@ -278,23 +284,23 @@ class _TcpConnection(BaseRequestHandler, Transport):
                 break
             L().debug('data from %s: %r'%(self.name, data))
             leftover = self.received(sender=self.name, data=leftover+data)
-        
+
     def finish(self):
         L().debug('Closed TCP connection to %s'%self.name)
         # Getting here implies that this transport already stopped.
         self.server.mux.remove_transport(self, stop=False)
-    
+
     # Transport overrides
     def start(self):
         self.transport_running.set()
-        
+
     def run(self):
         # _TcpConnection starts "running" by itself (since the connection is already opened by definition).
         raise Exception('You shall not use .run()')
-        
+
     def stop(self):
         self.transport_running.clear()
-        
+
     def send(self, data, receivers=None):
         if receivers is not None and not self.name in receivers:
             return
@@ -311,7 +317,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
 
     def _keepalive_tick(self):
         if self.keepalive_msg:
-            self._keepalive_countdown -= self.request.gettimeout()
+            self._keepalive_countdown -= self._CHECK_INTERVAL
             if self._keepalive_countdown <= 0:
                 L().debug('send keepalive')
                 self.request.sendall(self.keepalive_msg)
