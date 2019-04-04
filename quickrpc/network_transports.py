@@ -66,6 +66,12 @@ class UdpTransport(Transport):
             self.socket.sendto(data, ('<broadcast>', self.port))
         
 class TcpClientTransport(Transport):
+    '''Transport that connects to a TCP server.
+
+    Optionally, a keepalive message can be configured. ``keepalive_msg`` is sent verbatim
+    every ``keepalive_interval`` seconds while the connection is idle. Any sending or
+    receiving resets the timer. You can change the attributes anytime.
+    '''
     shorthand = 'tcp'
     @classmethod
     def fromstring(cls, expression):
@@ -74,17 +80,21 @@ class TcpClientTransport(Transport):
         # uses default connect timeout
         return cls(host=host, port=int(port))
 
-    def __init__(self, host, port, connect_timeout=10):
+    def __init__(self, host, port, connect_timeout=10, keepalive_msg=b'', keepalive_interval=10):
         Transport.__init__(self)
         self.address = (host, port)
         self.name = '%s:%s'%self.address
         self.connect_timeout = connect_timeout
+        self.keepalive_msg = keepalive_msg
+        self.keepalive_interval = keepalive_interval
+        self._keepalive_countdown = keepalive_interval
 
     def send(self, data, receivers=None):
         if not self.running:
             raise IOError('Tried to send over non-running transport!')
         if receivers is not None and not self.name in receivers:
             return
+        self._keepalive_countdown = self.keepalive_interval
         L().debug('TcpClientTransport .send to %s: %r'%(self.name, data))
         # FIXME: do something on failure
         self.socket.sendall(data)
@@ -99,6 +109,7 @@ class TcpClientTransport(Transport):
         L().info('Connected to %s'%(self.name,))
         # Sets the timeout for .read and .write
         self.socket.settimeout(0.5)
+        self._keepalive_countdown = self.keepalive_interval
 
     def run(self):
         '''run, blocking.'''
@@ -108,8 +119,9 @@ class TcpClientTransport(Transport):
             try:
                 data = self.socket.recv(1024)
             except sk.timeout:
+                self._keepalive_tick()
                 continue
-            #data = data.replace(b'\r\n', b'\n')
+            self._keepalive_countdown = self.keepalive_interval
             if data == b'':
                 # Connection was closed.
                 self.running=False
@@ -123,6 +135,14 @@ class TcpClientTransport(Transport):
             L().info('Closing connection to %s.'%(self.name,))
             self.socket.close()
         L().debug('TcpClientTransport %s has finished'%(self.name))
+
+    def _keepalive_tick(self):
+        if self.keepalive_msg:
+            self._keepalive_countdown -= self.socket.gettimeout()
+            if self._keepalive_countdown <= 0:
+                L().debug('send keepalive')
+                self.socket.sendall(self.keepalive_msg)
+                self._keepalive_countdown = self.keepalive_interval
 
 
 class TcpServerTransport(MuxTransport):
@@ -139,6 +159,11 @@ class TcpServerTransport(MuxTransport):
     
     You can optionally pass an announcer (as returned by announcer_api.make_udp_announcer).
     It will be started/stopped together with the TcpServerTransport.
+
+    Optionally, a keepalive message can be configured. On each connection,
+    ``keepalive_msg`` is sent verbatim every ``keepalive_interval`` seconds
+    while the connection is idle. Any sending or receiving resets the timer.
+    You can change the attributes directly while transport is stopped.
     
     Threads:
      - TcpServerTransport.run() blocks (use .start() for automatic extra Thread)
@@ -155,10 +180,11 @@ class TcpServerTransport(MuxTransport):
         _, iface, port = expression.split(':')
         return cls(port=int(port), interface=iface)
 
-
-    def __init__(self, port, interface='', announcer=None):
+    def __init__(self, port, interface='', announcer=None, keepalive_msg=b'', keepalive_interval=10):
         self.addr = (interface, port)
         self.announcer = announcer
+        self.keepalive_msg = keepalive_msg
+        self.keepalive_interval = keepalive_interval
         MuxTransport.__init__(self)
         
     def open(self):
@@ -170,7 +196,6 @@ class TcpServerTransport(MuxTransport):
                 self.announcer.transport.start()
             finally:
                 self.server.shutdown()
-                
         
     def run(self):
         MuxTransport.run(self)
@@ -186,8 +211,8 @@ class TcpServerTransport(MuxTransport):
         for transport in self.transports:
             if transport.name == name:
                 transport.transport_running.clear()
-                                    
-                                    
+
+
 class _TcpConnection(BaseRequestHandler, Transport):
     '''Bridge between TcpServer (BaseRequestHandler) and Transport.
     
@@ -202,10 +227,13 @@ class _TcpConnection(BaseRequestHandler, Transport):
     
     # BaseRequestHandler overrides
     def __init__(self, request, client_address, server):
-        BaseRequestHandler.__init__(self, request, client_address, server)
         # circumvent Transport.__init__, since none of the threading logic is used here
         #Transport.__init__(self)
         self._on_received = None
+        self.keepalive_msg = server.mux.keepalive_msg
+        self.keepalive_interval = server.mux.keepalive_interval
+        self._keepalive_countdown = self.keepalive_interval
+        BaseRequestHandler.__init__(self, request, client_address, server)
 
     @property
     def running(self):
@@ -232,9 +260,11 @@ class _TcpConnection(BaseRequestHandler, Transport):
             try:
                 data = self.request.recv(1024)
             except sk.timeout:
+                self._keepalive_tick()
                 continue
             except ConnectionResetError:
                 data = b''
+            self._keepalive_countdown = self.keepalive_interval
             #data = data.replace(b'\r\n', b'\n')
             if data == b'':
                 # Connection was closed.
@@ -265,5 +295,14 @@ class _TcpConnection(BaseRequestHandler, Transport):
             raise IOError('Tried to send over non-running transport!')
         if receivers is not None and not self.name in receivers:
             return
+        self._keepalive_countdown = self.keepalive_interval
         # FIXME: do something on failure
         self.request.sendall(data)
+
+    def _keepalive_tick(self):
+        if self.keepalive_msg:
+            self._keepalive_countdown -= self.request.gettimeout()
+            if self._keepalive_countdown <= 0:
+                L().debug('send keepalive')
+                self.request.sendall(self.keepalive_msg)
+                self._keepalive_countdown = self.keepalive_interval
