@@ -14,7 +14,8 @@ Use `tail -F echo_api.log` in another terminal to watch logged events.
 '''
 import logging
 L = lambda: logging.getLogger(__name__)
-from .remote_api import RemoteAPI, incoming, outgoing
+from threading import Event
+from .import transport, RemoteAPI, incoming, outgoing
 
 
 class EchoAPI(RemoteAPI):
@@ -34,17 +35,11 @@ class EchoAPI(RemoteAPI):
 
 
 def test():
-    from .codecs import JsonRpcCodec, TerseCodec
-    from .transports import StdioTransport, MuxTransport, TcpServerTransport
-    
     L().info('Start echo_api.test')
+    stop_event = Event()
 
-    mt = MuxTransport()
-    mt += StdioTransport()
-    server = TcpServerTransport(port=8888)
-    mt += server
     print('serving on port 8888')
-    api = EchoAPI(codec=TerseCodec(), transport=mt)
+    api = EchoAPI(codec='terse', transport='mux:(tcpserv::8888)(stdio:)')
     
     # on incoming "say", call "echo"
     api.say.connect(lambda sender="", text="": api.echo(text=text))
@@ -53,13 +48,17 @@ def test():
     def onquit(sender):
         if sender=='stdio':
             print('Server stops.')
-            mt.stop()
+            stop_event.set()
         else:
             print('Disconnect %s.'%sender)
-            server.close(sender)
+            api.transport.transports[0].close(sender)
     api.quit.connect(onquit)
     
-    mt.run()
+    api.transport.start()
+    try:
+        stop_event.wait()
+    finally:
+        api.transport.stop()
     
     L().info('Exit echo_api.test')
 
