@@ -80,7 +80,7 @@ class TcpClientTransport(Transport):
         # uses default connect timeout
         return cls(host=host, port=int(port))
 
-    def __init__(self, host, port, connect_timeout=10, keepalive_msg=b'', keepalive_interval=10):
+    def __init__(self, host, port, connect_timeout=10, keepalive_msg=b'', keepalive_interval=10, buffersize=1024):
         Transport.__init__(self)
         self.address = (host, port)
         self.name = '%s:%s'%self.address
@@ -88,6 +88,7 @@ class TcpClientTransport(Transport):
         self.keepalive_msg = keepalive_msg
         self.keepalive_interval = keepalive_interval
         self._keepalive_countdown = keepalive_interval
+        self.buffersize = buffersize
 
     def send(self, data, receivers=None):
         if not self.running:
@@ -117,7 +118,7 @@ class TcpClientTransport(Transport):
         leftover = b''
         while self.running:
             try:
-                data = self.socket.recv(1024)
+                data = self.socket.recv(self.buffersize)
             except sk.timeout:
                 self._keepalive_tick()
                 continue
@@ -180,11 +181,13 @@ class TcpServerTransport(MuxTransport):
         _, iface, port = expression.split(':')
         return cls(port=int(port), interface=iface)
 
-    def __init__(self, port, interface='', announcer=None, keepalive_msg=b'', keepalive_interval=10):
+    def __init__(self, port, interface='', announcer=None, keepalive_msg=b'', keepalive_interval=10, buffersize=1024):
         self.addr = (interface, port)
+        self.name = '%s:%s'%self.addr
         self.announcer = announcer
         self.keepalive_msg = keepalive_msg
         self.keepalive_interval = keepalive_interval
+        self.buffersize = buffersize
         MuxTransport.__init__(self)
         
     def open(self):
@@ -232,6 +235,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
         self._on_received = None
         self.keepalive_msg = server.mux.keepalive_msg
         self.keepalive_interval = server.mux.keepalive_interval
+        self.buffersize = server.mux.buffersize
         self._keepalive_countdown = self.keepalive_interval
         BaseRequestHandler.__init__(self, request, client_address, server)
 
@@ -258,7 +262,7 @@ class _TcpConnection(BaseRequestHandler, Transport):
         leftover = b''
         while self.transport_running.is_set():
             try:
-                data = self.request.recv(1024)
+                data = self.request.recv(self.buffersize)
             except sk.timeout:
                 self._keepalive_tick()
                 continue
@@ -297,7 +301,11 @@ class _TcpConnection(BaseRequestHandler, Transport):
             return
         self._keepalive_countdown = self.keepalive_interval
         # FIXME: do something on failure
-        self.request.sendall(data)
+        try:
+            self.request.sendall(data)
+        except Exception:
+            L().error('TcpServerTransport._TcpConnection: sending failed, see exc. info', exc_info=True)
+            raise
 
     def _keepalive_tick(self):
         if self.keepalive_msg:
