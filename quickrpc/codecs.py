@@ -59,7 +59,21 @@ class ErrorReply(object):
 class Codec(object):
     '''Responsible for serializing and deserializing method calls.
     
-    Subclass and override `encode` and `decode`.
+    Subclass and override :any:`encode`, :any:`decode`, optionally 
+    :any:`encode_reply`, :any:`encode_error`.
+    
+    Protocol overview
+    .................
+    
+    Byte-data payload is generated from python data by using:
+    
+        * :any:`encode` for "regular" messages / requests
+        * :any:`encode_reply` for return data
+        * :any:`encode_error` for error return data.
+        
+    Python data is retrieved from bytes by :any:`decode`. This returns a list of 
+    objects, which can be instances of :any:`Message`, :any:`Reply` and 
+    :any:`ErrorReply`.
     '''
     # The shorthand to use for string creation.
     shorthand = ''
@@ -133,9 +147,8 @@ class MyJsonDecoder(json.JSONDecoder):
 class JsonRpcCodec(Codec):
     '''Json codec: convert to json
     
-    bytes values are converted into a base64-encoded string and prepended by "b".
-    str values are prepended by "s".
-    method name is added as dict param __method.
+    bytes values are converted into a an object containing the single key 
+    ``__bytes`` with value being base64-encoded data.
     '''
     shorthand = 'jrpc'
     @classmethod
