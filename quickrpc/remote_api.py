@@ -57,6 +57,7 @@ import inspect
 from functools import wraps
 from .codecs import Codec, Message, Reply, ErrorReply
 from .transports import Transport
+from .security import Security
 
 L = lambda: logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ class RemoteAPI(object):
     
     :attr:`.codec` holds the Codec for (de)serializing data.
     :attr:`.transport` holds the underlying transport.
+    :attr:`.security` holds the security provider.
 
     Both can also be strings, then :meth:`.Transport.fromstring` / :meth:`.Codec.fromstring` are used
     to acquire the respective objects. In this case, transport still needs to be started
@@ -128,13 +130,16 @@ class RemoteAPI(object):
     upon initialization by giving ``invert=True`` kwarg.
     
     '''
-    def __init__(self, codec='jrpc', transport=None, invert=False, async_processing=False):
+    def __init__(self, codec='jrpc', transport=None, security='null', invert=False, async_processing=False):
         if isinstance(codec, str):
             codec = Codec.fromstring(codec)
         if isinstance(transport, str):
             transport = Transport.fromstring(transport)
+        if isinstance(security, str):
+            security = Security.fromstring(security)
         self.codec = codec
         self.transport = transport
+        self.security = security
         # FIXME: limit size of _pending_replies somehow
         self._pending_replies = {}
         self._id_dispenser = it.count()
@@ -182,7 +187,7 @@ class RemoteAPI(object):
 
     def _handle_received(self, sender, data):
         '''called by the Transport when data comes in.'''
-        messages, remainder = self.codec.decode(data)
+        messages, remainder = self.codec.decode(data, sec_in=self.security.sec_in)
         for message in messages:
             if isinstance(message, Exception):
                 self.message_error(sender, message)
@@ -217,7 +222,7 @@ class RemoteAPI(object):
             else:
                 if has_reply:
                     try:
-                        data = self.codec.encode_reply(message, result)
+                        data = self.codec.encode_reply(message, result, sec_out=self.security.sec_out)
                         self.transport.send(data, receivers=[sender])
                     except Exception as e:
                         L().error('Exception in message handler while sending response: '+str(e), exc_info=True)
@@ -237,7 +242,7 @@ class RemoteAPI(object):
         '''
         L().warning(exception)
         if in_reply_to.id:
-            data = self.codec.encode_error(in_reply_to, exception, errorcode=0)
+            data = self.codec.encode_error(in_reply_to, exception, errorcode=0, sec_out=self.security.sec_out)
             self.transport.send(data, receivers=[sender])
 
     def _deliver_reply(self, reply):
@@ -249,6 +254,7 @@ class RemoteAPI(object):
             L().warning('Received reply that was never requested: %r'%(reply,))
             return
 
+        #FIXME: secinfo is discarded
         if isinstance(reply, Reply):
             promise.set_result(reply.result)
         else:
@@ -278,18 +284,22 @@ class RemoteAPI(object):
                 yield attr
 
 
-# TODO: keep signature of wrapped methods
-
 def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
     '''Marks a method as possible incoming message.
     
-    ``@incoming(has_reply=False, allow_position_args=False)``
+    ``@incoming(has_reply=False, allow_positional_args=False)``
     
     Incoming methods keep list of connected listeners, which are called with the 
     signature of the incoming method (excluding ``self``). The first argument
     will be passed positional and is a string describing the sender of the message.
     The remaining arguments can be chosen freely and will usually be passed as named
     args.
+    
+    Optionally, you can receive security info (the ``secinfo`` dict extracted 
+    from the message). For this, call ``myapi.<method>.pass_secinfo(True)``.
+    Listener calls then receive an additional kwarg called ``secinfo``, containing 
+    the received dictionary. I.e. your handler(s) must add a ``secinfo=`` 
+    parameter in addition to the signature specified in the ``RemoteAPI``.
     
     Listeners can be added with ``myapi.<method>.connect(handler)`` and 
     disconnected with ``.disconnect(handler)``. They are called in the order that 
@@ -321,6 +331,7 @@ def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
         # when called as @decorator(...)
         return lambda unbound_method: incoming(unbound_method=unbound_method, has_reply=has_reply, allow_positional_args=allow_positional_args)
     # when called as @decorator or explicitly
+    pass_secinfo = [False]
     @wraps(unbound_method)
     def fn(self, sender, message):
         if isinstance(message.kwargs, dict):
@@ -338,6 +349,8 @@ def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
         except TypeError:
             # signature is wrong
             raise TypeError('incoming call with wrong signature')
+        if pass_secinfo[0]:
+            kwargs['secinfo'] = message.secinfo
         for listener in fn._listeners:
             replies.append(listener(sender, *args, **kwargs))
         if has_reply:
@@ -351,6 +364,7 @@ def incoming(unbound_method=None, has_reply=False, allow_positional_args=False):
     fn._remote_api_incoming = {'has_reply': has_reply}
     fn._listeners = []
     fn._unbound_method = unbound_method
+    fn.pass_secinfo = lambda val: pass_secinfo.__setitem__(0, val)
     fn.connect = lambda listener: fn._listeners.append(listener)
     fn.disconnect = lambda listener: fn._listeners.remove(listener)
     fn.inverted = lambda: outgoing(unbound_method, has_reply=has_reply, allow_positional_args=allow_positional_args)
@@ -411,7 +425,7 @@ def outgoing(unbound_method=None, has_reply=False, allow_positional_args=False):
             call_id, promise = self._new_request()
         else:
             call_id = 0
-        data = self.codec.encode(unbound_method.__name__, kwargs=kwargs, id=call_id)
+        data = self.codec.encode(unbound_method.__name__, kwargs=kwargs, id=call_id, sec_out=self.security.sec_out)
         self.transport.send(data, receivers=receivers)
         if has_reply:
             return promise
