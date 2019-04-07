@@ -67,8 +67,7 @@ class Codec(object):
     Subclass and override :any:`encode`, :any:`decode`, optionally 
     :any:`encode_reply`, :any:`encode_error`.
     
-    Protocol overview
-    .................
+    *Protocol overview*
     
     Byte-data payload is generated from python data by using:
     
@@ -80,8 +79,7 @@ class Codec(object):
     objects, which can be instances of :any:`Message`, :any:`Reply` and 
     :any:`ErrorReply`.
     
-    Security
-    ........
+    *Security*
     
     Let *payload* denote the "inner" message data and *frame* the message going on the wire, both being byte sequences.
     ``encode*()`` can be given a sec_out() callback, taking the payload data and returning ``(secinfo, new_payload)``.
@@ -96,7 +94,7 @@ class Codec(object):
     Decoding: ``decode`` again takes a sec_in() callback, accepting security info and payload data, returning the "unpacked" payload.
     E.g. secinfo could check the signature and raise an error if the message was 
     forged. The secinfo dictionary is returned within the :any:`Message`, 
-    :any:`Result` or :any:`ErrorResult` object.
+    :any:`Reply` or :any:`ErrorReply` object.
     
     '''
     # The shorthand to use for string creation.
@@ -137,11 +135,11 @@ class Codec(object):
              - ErrorReply (to the previous message with the same id)
 
         Message attributes
-            .method attribute (string), .kwargs attribute (dict), .id
+            .method attribute (string), .kwargs attribute (dict), .id, .secinfo (dict)
         Reply attributes
-            .result, .id
+            .result, .id, .secinfo (dict)
         ErrorReply attributes
-            .exception, .id, .errorcode
+            .exception, .id, .errorcode, .secinfo (dict)
         '''
     
     def encode(self, method, kwargs=None, id=0, sec_out=None):
@@ -186,24 +184,23 @@ class JsonRpcCodec(Codec):
     bytes values are converted into a an object containing the single key 
     ``__bytes`` with value being base64-encoded data.
     
-    Authenticated-JSON-RPC protocol:
+    If security is used, the following "Authenticated-JSON-RPC" protocol applies:
     
-    Encoding with security
-    ......................
+    *Encoding*
     
-    Prepends a special, valid json-rpc message before the payload:
+    Prepend a special, valid json-rpc message before the payload:
     
     ``{"jsonrpc": "2.0", "method": "rpc.secinfo", "params": <secinfo>}<DELIM><payload><DELIM>``
     
     If secinfo is empty, NOTHING is prepended (i.e. behaves like unextended JSON-RPC)
     
-    .. warning:: 
+    .. note:: 
         Payload must not contain the delimiter even if it is encrypted. Raw data could be b64-encoded.
+        If payload is encrypted, basic-JSON-RPC compatibility is of course lost.
     
-    Decoding with security
-    ......................
+    *Decoding with security*
     
-    Decodes delimited messages one-by-one as usual ("one" being the bytes between delimiters).
+    Decode delimited messages one-by-one as usual ("one" being the bytes between delimiters).
     
     If a ``rpc.secinfo`` call is detected, take the unaltered payload from the 
     next message, giving secinfo and payload. If next message is incomplete (no 
@@ -212,15 +209,15 @@ class JsonRpcCodec(Codec):
     For regular call (method != ``rpc.secinfo``), return the message itself as 
     payload wtih empty secinfo. 
     
-    Discussion:
-    ...........
-    - allows framing without touching payload :-)
-    - allows decoding the header without decoding payload :-)
-    - allows using byte-payload as is, particularly allows encrypted+literal payload to coexist (however encrypted payload breaks JSON-RPC compat!) :-)
-    - Msg to "unaware" peer: will throw the rpc.secinfo calls away silently or loudly, but 
-        is able to operate. Missing ID indicates a notification, i.e. peer will not send 
-        response back per JSON-RPC spec. :-)
-    - Msg from "unaware" peer: will implicitly be treated as no-security message.
+    *Discussion:*
+    
+     - allows framing without touching payload :-)
+     - allows decoding the header without decoding payload :-)
+     - allows using byte-payload as is, particularly allows encrypted+literal payload to coexist (however encrypted payload breaks JSON-RPC compat!) :-)
+     - Msg to "unaware" peer: will throw the rpc.secinfo calls away silently or loudly, but 
+       is able to operate. Missing ID indicates a notification, i.e. peer will not send 
+       response back per JSON-RPC spec. :-)
+     - Msg from "unaware" peer: will implicitly be treated as no-security message.
     
     '''
     shorthand = 'jrpc'

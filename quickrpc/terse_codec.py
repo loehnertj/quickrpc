@@ -11,6 +11,7 @@ class TerseCodec(Codec):
 
     encodes to: method[id] param1:1, param2:"foo"<NL>
     values:
+    
         * int/float: 1.0
         * bytes: '(base64-string'
         * str: "python-escaped str"
