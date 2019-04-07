@@ -52,9 +52,7 @@ class Security:
             * ``secinfo`` (dict): security information, dictionary str->str
             * ``new_payload`` (bytes): transformed payload; ``None`` indicates that original payload can be used.
             
-        ``secinfo`` can contain arbitrary keys specified by the subclass. A 
-        string identifying the user must be stored into the ``"user"`` key to be 
-        usable by RemoteApi.
+        ``secinfo`` can contain arbitrary keys specified by the subclass.
         
         The provider can e.g. calculate a signature and/or encrypt the payload.
         '''
@@ -98,7 +96,7 @@ class NoSecurity(Security):
     '''
     
     shorthand = 'blindly_believe_everything'
-    def __init__(self, user='')
+    def __init__(self, user=''):
         self.user = user
         
     def sec_out(self, payload):
