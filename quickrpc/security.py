@@ -80,6 +80,9 @@ class NullSecurity(Security):
     Default if nothing is specified.
     '''
     shorthand = 'null'
+    @classmethod
+    def fromstring(cls, expression):
+        return cls()
     sec_out = None
     sec_in = None
     
@@ -99,10 +102,14 @@ class NoSecurity(Security):
     def __init__(self, user=''):
         self.user = user
         
+    @classmethod
+    def fromstring(cls, expression):
+        return cls()
+        
     def sec_out(self, payload):
         '''return ``self.user`` as username.'''
         return {'user': self.user}, None
     
-    def sec_in(self, payload):
+    def sec_in(self, payload, secinfo):
         '''does nothing'''
         return None
