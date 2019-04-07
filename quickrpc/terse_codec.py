@@ -2,7 +2,7 @@ import logging
 import base64
 import binascii
 import re
-from .codecs import Codec, Message, Reply, ErrorReply, DecodeError, RemoteError, _fmt_exc
+from .codecs import Codec, Message, Reply, ErrorReply, DecodeError, EncodeError, RemoteError, _fmt_exc
 L = lambda: logging.getLogger(__name__)
 
  
@@ -31,19 +31,23 @@ class TerseCodec(Codec):
         '''terse:'''
         return cls()
 
-    def encode(self, method, kwargs, id=0):
+    def encode(self, method, kwargs, id=0, sec_out=None):
         '''encodes the call, including trailing newline'''
+        if sec_out: raise EncodeError('Security is not supported by TerseCodec.')
         return _encode_method(method, id, kwargs)
     
-    def encode_reply(self, in_reply_to, result):
+    def encode_reply(self, in_reply_to, result, sec_out=None):
+        if sec_out: raise EncodeError('Security is not supported by TerseCodec.')
         return b'[%d]:%s'%(in_reply_to.id, _encode_value(result))
     
-    def encode_error(self, in_reply_to, exception, errorcode=0):
+    def encode_error(self, in_reply_to, exception, errorcode=0, sec_out=None):
+        if sec_out: raise EncodeError('Security is not supported by TerseCodec.')
         text = _encode_value(str(exception))
         details = _encode_value(_fmt_exc(exception))
         return b'[%d]! message:%s details:%s'%(in_reply_to.id, text, details)
 
-    def decode(self, data):
+    def decode(self, data, sec_in=None):
+        if sec_in: raise DecodeError('Security is not supported by TerseCodec')
         lines = data.split(b'\n')
         leftover = lines.pop()
         messages = []
