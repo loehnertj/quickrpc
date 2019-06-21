@@ -24,6 +24,7 @@ they can easily put in a config file or on the commandline. See
 from . import transports
 # import, so that subclasses become known
 from . import network_transports
+from . import bus_transport
 from . import codecs
 from . import terse_codec
 from .remote_api import RemoteAPI, incoming, outgoing
