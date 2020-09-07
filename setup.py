@@ -2,7 +2,7 @@ from setuptools import setup
 from pathlib import Path
 
 setup(name='quickrpc',
-      version='0.1',
+      version='0.1.0',
       description='Small, interoperable, automagic RPC library.',
       long_description=Path('README.rst').read_text(),
       long_description_content_type='text/x-rst',
